@@ -1,0 +1,62 @@
+{
+  "dataset": "ChemProt",
+  "rare_relations": ["CPR:5", "CPR:6"],
+  "no_relation_labels": ["NO_RELATION"],
+  "relations": [
+    {
+      "raw_label": "CPR:3",
+      "label_words": "upregulator activator inducer",
+      "relation_description": "a chemical increases the expression, amount, or activity of a protein",
+      "entity_type_aware_description": "given a chemical and a protein, the chemical upregulates, activates, or induces the protein",
+      "knowledge_enhanced_description": "the chemical activates, induces, stimulates, increases, or upregulates the protein activity, expression, or production",
+      "head_type": "chemical",
+      "tail_type": "protein"
+    },
+    {
+      "raw_label": "CPR:4",
+      "label_words": "downregulator inhibitor",
+      "relation_description": "a chemical decreases the expression, amount, or activity of a protein",
+      "entity_type_aware_description": "given a chemical and a protein, the chemical downregulates, inhibits, or suppresses the protein",
+      "knowledge_enhanced_description": "the chemical inhibits, suppresses, blocks, reduces, or downregulates the protein activity, expression, or production",
+      "head_type": "chemical",
+      "tail_type": "protein"
+    },
+    {
+      "raw_label": "CPR:5",
+      "label_words": "agonist",
+      "relation_description": "a chemical binds to and activates a receptor or protein as an agonist",
+      "entity_type_aware_description": "given a chemical and a protein, the chemical acts as an agonist of the protein",
+      "knowledge_enhanced_description": "the chemical is an agonist that binds a receptor or protein and triggers, enhances, or mimics its activity",
+      "head_type": "chemical",
+      "tail_type": "protein"
+    },
+    {
+      "raw_label": "CPR:6",
+      "label_words": "antagonist",
+      "relation_description": "a chemical blocks or counteracts the activity of a receptor or protein as an antagonist",
+      "entity_type_aware_description": "given a chemical and a protein, the chemical acts as an antagonist of the protein",
+      "knowledge_enhanced_description": "the chemical is an antagonist that binds a receptor or protein and blocks, counteracts, or prevents its activity",
+      "head_type": "chemical",
+      "tail_type": "protein"
+    },
+    {
+      "raw_label": "CPR:9",
+      "label_words": "substrate product",
+      "relation_description": "a chemical is a substrate or product in a protein-mediated biochemical reaction",
+      "entity_type_aware_description": "given a chemical and a protein, the chemical is a substrate or product of the protein",
+      "knowledge_enhanced_description": "the chemical participates as a substrate, product, metabolite, or reaction participant for the enzyme or protein",
+      "head_type": "chemical",
+      "tail_type": "protein"
+    },
+    {
+      "raw_label": "NO_RELATION",
+      "label_words": "no relation",
+      "relation_description": "the entity pair does not express a target chemical protein relation",
+      "entity_type_aware_description": "given a chemical and a protein, no target ChemProt relation is stated",
+      "knowledge_enhanced_description": "the context does not state activation, inhibition, agonist, antagonist, substrate, or product relation",
+      "head_type": "chemical",
+      "tail_type": "protein",
+      "is_negative": true
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "experiment_id": "tiny_t5_P2_smoke_seed42",
+  "dataset": "TinyChemProtSmoke",
+  "model": "mock-t5-text2text",
+  "method": "P2_entity_type_description",
+  "backend": "mock",
+  "semantic_field": "entity_type_aware_description",
+  "seed": 42,
+  "test_file": "data/stage1/tiny/test.jsonl",
+  "schema_file": "data/stage1/tiny/relation_schema.yaml",
+  "output_dir": "outputs/stage1/tiny/t5_text2text/P2_entity_type_description_seed42"
+}

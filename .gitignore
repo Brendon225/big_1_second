@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Local environments
+.venv/
+venv/
+.env
+
+# Generated experiment artifacts
+outputs/
+checkpoints/
+
+# Raw and converted corpora stay local unless explicitly packaged.
+data/stage1/raw/
+data/stage1/chemprot/*.jsonl
+data/stage1/ddi2013/*.jsonl
+data/stage1/biored/*.jsonl
+
+# Large paper assets are kept local in this workspace.
+DP_paper/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

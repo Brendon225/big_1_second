@@ -1,0 +1,81 @@
+from pathlib import Path
+from typing import Any, Dict
+
+from src.stage1.backend_factory import build_stage1_model
+from src.stage1.data_io import read_json_config, read_jsonl, write_json, write_jsonl
+from src.stage1.metrics import evaluate_predictions, write_confusion_csv, write_per_class_csv
+from src.stage1.runner import write_error_cases, write_prototype_analysis
+from src.stage1.schema import load_relation_schema
+
+
+def run_training(config_path: str) -> Dict[str, Any]:
+    config = read_json_config(config_path)
+    schema = load_relation_schema(config["schema_file"])
+    train_samples = read_jsonl(config["train_file"])
+    dev_samples = read_jsonl(config["dev_file"])
+    test_samples = read_jsonl(config["test_file"])
+
+    model = build_stage1_model(
+        method=config["method"],
+        schema=schema,
+        semantic_field=config["semantic_field"],
+        backend=config.get("backend", "mock"),
+        alignment_lambda=config.get("alignment_lambda", 0.1),
+        temperature_tau=config.get("temperature_tau", 0.1),
+        prototype_type=config.get("prototype_type", "learnable"),
+        model_name_or_path=config.get("model_name_or_path", config.get("model", "t5-small")),
+        max_input_length=config.get("max_input_length", 512),
+        max_output_length=config.get("max_output_length", 32),
+    )
+
+    train_log = [
+        f"experiment_id={config['experiment_id']}",
+        f"backend={config.get('backend', 'mock')}",
+        f"train_samples={len(train_samples)}",
+        f"dev_samples={len(dev_samples)}",
+        f"test_samples={len(test_samples)}",
+        f"epochs={config.get('epochs', 1)}",
+        "note=This runner currently executes a deterministic smoke/evaluation pass. "
+        "Use backend=hf after installing torch/transformers for real seq2seq training.",
+    ]
+
+    dev_output = model.forward(dev_samples)
+    test_output = model.forward(test_samples)
+    evaluation = evaluate_predictions(
+        test_output.predictions,
+        relation_labels=schema.labels,
+        rare_relations=schema.rare_relations,
+        no_relation_labels=schema.no_relation_labels,
+    )
+    metrics = {
+        "experiment_id": config["experiment_id"],
+        "dataset": config["dataset"],
+        "model": config["model"],
+        "method": config["method"],
+        "backend": config.get("backend", "mock"),
+        "train_samples": len(train_samples),
+        "dev_samples": len(dev_samples),
+        "test_samples": len(test_samples),
+        "dev_loss": dev_output.loss,
+        "loss": test_output.loss,
+        "generation_loss": test_output.generation_loss,
+        "alignment_loss": test_output.alignment_loss,
+        **evaluation.metrics,
+    }
+
+    output_dir = Path(config["output_dir"])
+    output_dir.mkdir(parents=True, exist_ok=True)
+    Path(output_dir / "run_config.yaml").write_text(
+        Path(config_path).read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    Path(output_dir / "train_log.txt").write_text("\n".join(train_log) + "\n", encoding="utf-8")
+    write_json(str(output_dir / "metrics.json"), metrics)
+    write_jsonl(str(output_dir / "predictions.jsonl"), test_output.predictions)
+    write_per_class_csv(str(output_dir / "per_class_metrics.csv"), evaluation.per_class)
+    write_confusion_csv(str(output_dir / "confusion_matrix.csv"), evaluation.confusion)
+    write_error_cases(str(output_dir / "error_cases.md"), config, test_output.predictions)
+    if test_output.prototype_scores:
+        write_jsonl(str(output_dir / "prototype_scores.jsonl"), test_output.prototype_scores)
+        write_prototype_analysis(str(output_dir / "prototype_analysis.csv"), test_output.prototype_scores)
+    return metrics

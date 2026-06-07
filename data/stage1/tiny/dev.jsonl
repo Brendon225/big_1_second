@@ -1,0 +1,2 @@
+{"id":"tiny_dev_001","text":"The molecule suppresses TNF protein expression.","head_entity":"molecule","head_type":"chemical","tail_entity":"TNF","tail_type":"protein","gold_relation":"CPR:4","split":"dev"}
+{"id":"tiny_dev_002","text":"Ligand C is an agonist of GPCR signaling protein.","head_entity":"Ligand C","head_type":"chemical","tail_entity":"GPCR","tail_type":"protein","gold_relation":"CPR:5","split":"dev"}

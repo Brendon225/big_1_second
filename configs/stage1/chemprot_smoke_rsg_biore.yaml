@@ -1,0 +1,15 @@
+{
+  "experiment_id": "chemprot_rsg_R2_smoke_seed42",
+  "dataset": "ChemProt",
+  "model": "mock-rsg-biore",
+  "method": "R2_prototype_alignment",
+  "backend": "mock",
+  "semantic_field": "entity_type_aware_description",
+  "prototype_type": "learnable",
+  "alignment_lambda": 0.1,
+  "temperature_tau": 0.1,
+  "seed": 42,
+  "test_file": "data/stage1/chemprot/test.jsonl",
+  "schema_file": "data/stage1/chemprot/relation_schema.yaml",
+  "output_dir": "outputs/stage1/chemprot/rsg_biore/R2_prototype_alignment_seed42_smoke"
+}

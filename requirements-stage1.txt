@@ -1,0 +1,9 @@
+# Smoke tests run with Python stdlib only.
+#
+# Install these only when moving from mock smoke tests to real T5/BioBART training.
+torch
+transformers
+sentencepiece
+scikit-learn
+PyYAML
+tqdm

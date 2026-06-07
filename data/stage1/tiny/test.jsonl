@@ -1,0 +1,3 @@
+{"id":"tiny_test_001","text":"Aspirin inhibits COX1 activity.","head_entity":"Aspirin","head_type":"chemical","tail_entity":"COX1","tail_type":"protein","gold_relation":"CPR:4","split":"test"}
+{"id":"tiny_test_002","text":"Compound A activates PPAR gamma expression.","head_entity":"Compound A","head_type":"chemical","tail_entity":"PPAR gamma","tail_type":"protein","gold_relation":"CPR:3","split":"test"}
+{"id":"tiny_test_003","text":"Drug B acts as an agonist of receptor RXR.","head_entity":"Drug B","head_type":"chemical","tail_entity":"RXR","tail_type":"protein","gold_relation":"CPR:5","split":"test"}

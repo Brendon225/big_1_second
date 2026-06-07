@@ -1,0 +1,53 @@
+{
+  "dataset": "DDI2013",
+  "rare_relations": ["int", "advice"],
+  "no_relation_labels": ["false"],
+  "relations": [
+    {
+      "raw_label": "mechanism",
+      "label_words": "mechanism",
+      "relation_description": "one drug changes the pharmacokinetic or pharmacodynamic mechanism of another drug",
+      "entity_type_aware_description": "given two drugs, one drug affects the mechanism, metabolism, clearance, or action of the other drug",
+      "knowledge_enhanced_description": "the interaction is mechanistic, such as altered metabolism, enzyme inhibition, clearance, concentration, or pharmacologic action",
+      "head_type": "drug",
+      "tail_type": "drug"
+    },
+    {
+      "raw_label": "effect",
+      "label_words": "effect",
+      "relation_description": "two drugs interact and cause a clinical or pharmacological effect",
+      "entity_type_aware_description": "given two drugs, their combination changes an effect, toxicity, adverse event, or therapeutic response",
+      "knowledge_enhanced_description": "the interaction changes efficacy, toxicity, adverse effects, response, risk, or clinical outcome when the drugs are combined",
+      "head_type": "drug",
+      "tail_type": "drug"
+    },
+    {
+      "raw_label": "advice",
+      "label_words": "advice recommendation",
+      "relation_description": "the text gives advice or a recommendation about using two drugs together",
+      "entity_type_aware_description": "given two drugs, the text recommends avoiding, adjusting, monitoring, or managing their combined use",
+      "knowledge_enhanced_description": "the interaction is expressed as clinical advice, such as avoid coadministration, adjust dose, monitor patient, or use caution",
+      "head_type": "drug",
+      "tail_type": "drug"
+    },
+    {
+      "raw_label": "int",
+      "label_words": "interaction",
+      "relation_description": "the text states that two drugs interact but does not specify mechanism, effect, or advice",
+      "entity_type_aware_description": "given two drugs, the text states a drug interaction without enough detail for another DDI subtype",
+      "knowledge_enhanced_description": "the drugs are reported to interact, but the passage lacks a specific mechanism, clinical effect, or management recommendation",
+      "head_type": "drug",
+      "tail_type": "drug"
+    },
+    {
+      "raw_label": "false",
+      "label_words": "no interaction",
+      "relation_description": "the pair of drugs does not express a target drug drug interaction",
+      "entity_type_aware_description": "given two drugs, no target DDI relation is stated between them",
+      "knowledge_enhanced_description": "the sentence does not state mechanism, effect, advice, or unspecified drug interaction",
+      "head_type": "drug",
+      "tail_type": "drug",
+      "is_negative": true
+    }
+  ]
+}

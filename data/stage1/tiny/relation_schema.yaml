@@ -1,0 +1,44 @@
+{
+  "dataset": "TinyChemProtSmoke",
+  "rare_relations": ["CPR:5"],
+  "no_relation_labels": ["NO_RELATION"],
+  "relations": [
+    {
+      "raw_label": "CPR:3",
+      "label_words": "upregulator activator",
+      "relation_description": "a chemical increases the activity or expression of a protein",
+      "entity_type_aware_description": "given a chemical and a protein, the chemical activates or increases the protein",
+      "knowledge_enhanced_description": "the chemical activates, induces, stimulates, or upregulates the protein activity or expression",
+      "head_type": "chemical",
+      "tail_type": "protein"
+    },
+    {
+      "raw_label": "CPR:4",
+      "label_words": "downregulator inhibitor",
+      "relation_description": "a chemical decreases the activity or expression of a protein",
+      "entity_type_aware_description": "given a chemical and a protein, the chemical inhibits or decreases the protein",
+      "knowledge_enhanced_description": "the chemical inhibits, suppresses, reduces, blocks, or downregulates the protein activity or expression",
+      "head_type": "chemical",
+      "tail_type": "protein"
+    },
+    {
+      "raw_label": "CPR:5",
+      "label_words": "agonist",
+      "relation_description": "a chemical binds to and activates a receptor or protein as an agonist",
+      "entity_type_aware_description": "given a chemical and a protein, the chemical acts as an agonist of the protein",
+      "knowledge_enhanced_description": "the chemical is an agonist that binds a receptor or protein and triggers activity",
+      "head_type": "chemical",
+      "tail_type": "protein"
+    },
+    {
+      "raw_label": "NO_RELATION",
+      "label_words": "no relation",
+      "relation_description": "the entity pair does not express a target chemical protein relation",
+      "entity_type_aware_description": "given a chemical and a protein, no target relation is stated between them",
+      "knowledge_enhanced_description": "the sentence does not state activation, inhibition, agonist, antagonist, or substrate relation",
+      "head_type": "chemical",
+      "tail_type": "protein",
+      "is_negative": true
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{"id":"tiny_train_001","text":"Aspirin inhibits COX1 activity in the inflammatory pathway.","head_entity":"Aspirin","head_type":"chemical","tail_entity":"COX1","tail_type":"protein","gold_relation":"CPR:4","split":"train"}
+{"id":"tiny_train_002","text":"Compound A activates PPAR gamma expression in treated cells.","head_entity":"Compound A","head_type":"chemical","tail_entity":"PPAR gamma","tail_type":"protein","gold_relation":"CPR:3","split":"train"}
+{"id":"tiny_train_003","text":"Drug B acts as an agonist of receptor RXR.","head_entity":"Drug B","head_type":"chemical","tail_entity":"RXR","tail_type":"protein","gold_relation":"CPR:5","split":"train"}
+{"id":"tiny_train_004","text":"The report mentions caffeine and albumin but states no relation between them.","head_entity":"caffeine","head_type":"chemical","tail_entity":"albumin","tail_type":"protein","gold_relation":"NO_RELATION","split":"train"}
