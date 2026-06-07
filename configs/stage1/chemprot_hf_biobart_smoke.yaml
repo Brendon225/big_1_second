@@ -1,8 +1,8 @@
 {
-  "experiment_id": "chemprot_hf_t5_P2_smoke_seed42",
+  "experiment_id": "chemprot_hf_biobart_P2_smoke_seed42",
   "dataset": "ChemProt",
-  "model": "t5-small",
-  "model_name_or_path": "t5-small",
+  "model": "GanjinZero/biobart-base",
+  "model_name_or_path": "models/stage1/biobart-base",
   "method": "P2_entity_type_description",
   "backend": "hf",
   "semantic_field": "entity_type_aware_description",
@@ -21,5 +21,5 @@
   "dev_file": "data/stage1/chemprot/dev.jsonl",
   "test_file": "data/stage1/chemprot/test.jsonl",
   "schema_file": "data/stage1/chemprot/relation_schema.yaml",
-  "output_dir": "outputs/stage1/chemprot/t5_text2text/P2_entity_type_description_seed42_hf_smoke"
+  "output_dir": "outputs/stage1/chemprot/biobart_text2text/P2_entity_type_description_seed42_hf_smoke"
 }

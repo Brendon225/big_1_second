@@ -12,6 +12,7 @@ venv/
 # Generated experiment artifacts
 outputs/
 checkpoints/
+models/stage1/
 
 # Raw and converted corpora stay local unless explicitly packaged.
 data/stage1/raw/

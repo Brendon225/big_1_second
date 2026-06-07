@@ -27,6 +27,9 @@ class TrainRunnerTest(unittest.TestCase):
                         "output_dir": str(output_dir),
                         "epochs": 1,
                         "seed": 42,
+                        "max_train_samples": 2,
+                        "max_dev_samples": 1,
+                        "max_test_samples": 1,
                     }
                 ),
                 encoding="utf-8",
@@ -36,6 +39,9 @@ class TrainRunnerTest(unittest.TestCase):
 
             self.assertEqual(metrics["experiment_id"], "tiny_fake_train")
             self.assertIn("micro_f1", metrics)
+            self.assertEqual(metrics["train_samples"], 2)
+            self.assertEqual(metrics["dev_samples"], 1)
+            self.assertEqual(metrics["test_samples"], 1)
             self.assertTrue((output_dir / "metrics.json").exists())
             self.assertTrue((output_dir / "predictions.jsonl").exists())
             self.assertTrue((output_dir / "train_log.txt").exists())

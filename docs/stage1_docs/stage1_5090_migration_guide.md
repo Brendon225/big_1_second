@@ -30,12 +30,14 @@ conda create -n rsg-biore python=3.10 -y
 conda activate rsg-biore
 pip install -r requirements-stage1.txt
 python -m unittest discover -s tests/stage1 -v
+python scripts/stage1/download_model.py --model-name GanjinZero/biobart-base --output-dir models/stage1/biobart-base
 python scripts/stage1/train_stage1.py --config configs/stage1/chemprot_hf_t5_smoke_template.yaml
+python scripts/stage1/train_stage1.py --config configs/stage1/chemprot_hf_biobart_smoke.yaml
 ```
 
 注意：
 
-1. `chemprot_hf_t5_smoke_template.yaml` 是真实 Hugging Face backend 模板。
-2. 当前 `HfText2TextModel.forward` 已可做生成式前向和输出解析；完整 fine-tuning loop 下一步再补。
-3. RSG-BioRE 的真实 PyTorch alignment training 需要在此基础上增加 encoder hidden pooling、prototype memory parameter 和 loss backward。
-4. 不要把 raw zip、`.venv`、outputs、checkpoints 提交到 git。
+1. `chemprot_hf_t5_smoke_template.yaml` 是真实 Hugging Face T5 backend 模板。
+2. `chemprot_hf_biobart_smoke.yaml` 使用本地 `models/stage1/biobart-base`。
+3. 当前 `HfText2TextModel` 已支持真实 seq2seq fine-tuning smoke；RSG-BioRE 的真实 PyTorch alignment training 下一步再补。
+4. 不要把 raw zip、`.venv`、models、outputs、checkpoints 提交到 git。

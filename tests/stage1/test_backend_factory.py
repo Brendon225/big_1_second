@@ -31,25 +31,14 @@ class BackendFactoryTest(unittest.TestCase):
 
         self.assertEqual(len(output.predictions), 1)
 
-    def test_hf_backend_reports_missing_optional_dependencies(self):
-        from src.stage1.backend_factory import build_stage1_model
-        from src.stage1.optional_deps import OptionalDependencyError
-        from src.stage1.schema import load_relation_schema
-
-        schema = load_relation_schema("data/stage1/tiny/relation_schema.yaml")
+    def test_optional_dependency_error_names_install_file(self):
+        from src.stage1.optional_deps import OptionalDependencyError, require_modules
 
         with self.assertRaises(OptionalDependencyError) as ctx:
-            build_stage1_model(
-                method="P2_entity_type_description",
-                schema=schema,
-                semantic_field="entity_type_aware_description",
-                backend="hf",
-                model_name_or_path="t5-small",
-            )
+            require_modules(["stage1_definitely_missing_dependency"], "test backend")
 
         message = str(ctx.exception)
-        self.assertIn("torch", message)
-        self.assertIn("transformers", message)
+        self.assertIn("stage1_definitely_missing_dependency", message)
         self.assertIn("requirements-stage1.txt", message)
 
 

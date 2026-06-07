@@ -27,6 +27,7 @@ def build_stage1_model(
             model_name_or_path=kwargs.get("model_name_or_path", "t5-small"),
             max_input_length=int(kwargs.get("max_input_length", 512)),
             max_output_length=int(kwargs.get("max_output_length", 32)),
+            device=kwargs.get("device"),
         )
     raise ValueError(f"Unknown backend: {backend}")
 

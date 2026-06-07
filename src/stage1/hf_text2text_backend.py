@@ -1,7 +1,9 @@
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from src.stage1.metrics import parse_relation_output
 from src.stage1.model_outputs import ModelOutput
+from src.stage1.numeric_utils import finite_or_default
 from src.stage1.prompting import build_relation_prompt, build_target_text
 from src.stage1.schema import RelationSchema
 
@@ -20,7 +22,9 @@ class HfText2TextModel:
         model_name_or_path: str,
         max_input_length: int = 512,
         max_output_length: int = 32,
+        device: Optional[str] = None,
     ) -> None:
+        import torch
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
         self.schema = schema
@@ -28,8 +32,10 @@ class HfText2TextModel:
         self.model_name_or_path = model_name_or_path
         self.max_input_length = max_input_length
         self.max_output_length = max_output_length
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path)
+        self.model.to(self.device)
 
     def build_examples(self, samples: List[Dict[str, str]]) -> List[Dict[str, str]]:
         return [
@@ -45,21 +51,9 @@ class HfText2TextModel:
     def forward(self, batch: List[Dict[str, str]]) -> ModelOutput:
         import torch
 
+        self.model.eval()
         examples = self.build_examples(batch)
-        inputs = self.tokenizer(
-            [item["input_text"] for item in examples],
-            padding=True,
-            truncation=True,
-            max_length=self.max_input_length,
-            return_tensors="pt",
-        )
-        labels = self.tokenizer(
-            [item["target_text"] for item in examples],
-            padding=True,
-            truncation=True,
-            max_length=self.max_output_length,
-            return_tensors="pt",
-        )["input_ids"]
+        inputs, labels = self._tokenize_batch(examples)
         labels[labels == self.tokenizer.pad_token_id] = -100
 
         with torch.no_grad():
@@ -88,10 +82,84 @@ class HfText2TextModel:
                 }
             )
         fallback_loss = mismatches / max(len(batch), 1)
-        generation_loss = float(loss_output.loss.detach().cpu().item()) if loss_output.loss is not None else fallback_loss
+        raw_generation_loss = float(loss_output.loss.detach().cpu().item()) if loss_output.loss is not None else fallback_loss
+        generation_loss = finite_or_default(raw_generation_loss, fallback_loss)
         return ModelOutput(
             loss=generation_loss,
             generation_loss=generation_loss,
             alignment_loss=0.0,
             predictions=predictions,
         )
+
+    def train_model(
+        self,
+        train_samples: List[Dict[str, str]],
+        dev_samples: List[Dict[str, str]],
+        epochs: int = 1,
+        batch_size: int = 2,
+        learning_rate: float = 1e-4,
+        max_train_steps: Optional[int] = None,
+        gradient_clip_norm: Optional[float] = 1.0,
+        output_dir: Optional[str] = None,
+    ) -> List[str]:
+        import torch
+
+        logs: List[str] = []
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=learning_rate)
+        global_step = 0
+        self.model.train()
+        for epoch in range(1, epochs + 1):
+            for batch in iter_batches(train_samples, batch_size):
+                examples = self.build_examples(batch)
+                inputs, labels = self._tokenize_batch(examples)
+                labels[labels == self.tokenizer.pad_token_id] = -100
+                optimizer.zero_grad()
+                output = self.model(**inputs, labels=labels)
+                loss = output.loss
+                if not torch.isfinite(loss):
+                    logs.append(f"epoch={epoch} step={global_step + 1} train_loss=non_finite skipped=true")
+                    optimizer.zero_grad()
+                    continue
+                loss.backward()
+                if gradient_clip_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), float(gradient_clip_norm))
+                optimizer.step()
+                global_step += 1
+                logs.append(f"epoch={epoch} step={global_step} train_loss={float(loss.detach().cpu().item()):.6f}")
+                if max_train_steps is not None and global_step >= max_train_steps:
+                    break
+            dev_output = self.forward(dev_samples)
+            logs.append(f"epoch={epoch} dev_loss={dev_output.loss:.6f}")
+            if max_train_steps is not None and global_step >= max_train_steps:
+                break
+        if output_dir:
+            target = Path(output_dir) / "model"
+            target.mkdir(parents=True, exist_ok=True)
+            self.model.save_pretrained(target)
+            self.tokenizer.save_pretrained(target)
+            logs.append(f"saved_model={target}")
+        return logs
+
+    def _tokenize_batch(self, examples: List[Dict[str, str]]) -> tuple[Dict[str, Any], Any]:
+        inputs = self.tokenizer(
+            [item["input_text"] for item in examples],
+            padding=True,
+            truncation=True,
+            max_length=self.max_input_length,
+            return_tensors="pt",
+        )
+        labels = self.tokenizer(
+            [item["target_text"] for item in examples],
+            padding=True,
+            truncation=True,
+            max_length=self.max_output_length,
+            return_tensors="pt",
+        )["input_ids"]
+        inputs = {key: value.to(self.device) for key, value in inputs.items()}
+        labels = labels.to(self.device)
+        return inputs, labels
+
+
+def iter_batches(samples: List[Dict[str, str]], batch_size: int) -> List[Dict[str, str]]:
+    for start in range(0, len(samples), batch_size):
+        yield samples[start : start + batch_size]

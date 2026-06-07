@@ -11,9 +11,9 @@ from src.stage1.schema import load_relation_schema
 def run_training(config_path: str) -> Dict[str, Any]:
     config = read_json_config(config_path)
     schema = load_relation_schema(config["schema_file"])
-    train_samples = read_jsonl(config["train_file"])
-    dev_samples = read_jsonl(config["dev_file"])
-    test_samples = read_jsonl(config["test_file"])
+    train_samples = limit_samples(read_jsonl(config["train_file"]), config.get("max_train_samples"))
+    dev_samples = limit_samples(read_jsonl(config["dev_file"]), config.get("max_dev_samples"))
+    test_samples = limit_samples(read_jsonl(config["test_file"]), config.get("max_test_samples"))
 
     model = build_stage1_model(
         method=config["method"],
@@ -26,6 +26,7 @@ def run_training(config_path: str) -> Dict[str, Any]:
         model_name_or_path=config.get("model_name_or_path", config.get("model", "t5-small")),
         max_input_length=config.get("max_input_length", 512),
         max_output_length=config.get("max_output_length", 32),
+        device=config.get("device"),
     )
 
     train_log = [
@@ -35,9 +36,23 @@ def run_training(config_path: str) -> Dict[str, Any]:
         f"dev_samples={len(dev_samples)}",
         f"test_samples={len(test_samples)}",
         f"epochs={config.get('epochs', 1)}",
-        "note=This runner currently executes a deterministic smoke/evaluation pass. "
-        "Use backend=hf after installing torch/transformers for real seq2seq training.",
     ]
+
+    if hasattr(model, "train_model"):
+        train_log.extend(
+            model.train_model(
+                train_samples=train_samples,
+                dev_samples=dev_samples,
+                epochs=int(config.get("epochs", 1)),
+                batch_size=int(config.get("batch_size", 2)),
+                learning_rate=float(config.get("learning_rate", 1e-4)),
+                max_train_steps=config.get("max_train_steps"),
+                gradient_clip_norm=config.get("gradient_clip_norm", 1.0),
+                output_dir=config.get("output_dir"),
+            )
+        )
+    else:
+        train_log.append("note=backend has no train_model method; executed deterministic smoke/evaluation pass.")
 
     dev_output = model.forward(dev_samples)
     test_output = model.forward(test_samples)
@@ -79,3 +94,12 @@ def run_training(config_path: str) -> Dict[str, Any]:
         write_jsonl(str(output_dir / "prototype_scores.jsonl"), test_output.prototype_scores)
         write_prototype_analysis(str(output_dir / "prototype_analysis.csv"), test_output.prototype_scores)
     return metrics
+
+
+def limit_samples(samples: list[dict[str, str]], max_samples: Any) -> list[dict[str, str]]:
+    if max_samples is None:
+        return samples
+    limit = int(max_samples)
+    if limit < 0:
+        raise ValueError("max sample limits must be non-negative")
+    return samples[:limit]
