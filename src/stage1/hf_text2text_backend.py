@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from src.stage1.metrics import parse_relation_output
 from src.stage1.model_outputs import ModelOutput
@@ -91,12 +91,48 @@ class HfText2TextModel:
             predictions=predictions,
         )
 
+    def forward_in_batches(self, samples: List[Dict[str, str]], batch_size: int) -> ModelOutput:
+        import torch
+
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if not samples:
+            return ModelOutput(loss=0.0, generation_loss=0.0, alignment_loss=0.0, predictions=[])
+
+        total_loss = 0.0
+        total_generation_loss = 0.0
+        total_alignment_loss = 0.0
+        total_items = 0
+        predictions = []
+        prototype_scores = []
+
+        for batch in iter_batches(samples, batch_size):
+            output = self.forward(batch)
+            weight = len(batch)
+            total_items += weight
+            total_loss += output.loss * weight
+            total_generation_loss += output.generation_loss * weight
+            total_alignment_loss += output.alignment_loss * weight
+            predictions.extend(output.predictions)
+            prototype_scores.extend(output.prototype_scores)
+            if str(self.device).startswith("cuda"):
+                torch.cuda.empty_cache()
+
+        return ModelOutput(
+            loss=total_loss / total_items,
+            generation_loss=total_generation_loss / total_items,
+            alignment_loss=total_alignment_loss / total_items,
+            predictions=predictions,
+            prototype_scores=prototype_scores,
+        )
+
     def train_model(
         self,
         train_samples: List[Dict[str, str]],
         dev_samples: List[Dict[str, str]],
         epochs: int = 1,
         batch_size: int = 2,
+        eval_batch_size: Optional[int] = None,
         learning_rate: float = 1e-4,
         max_train_steps: Optional[int] = None,
         gradient_clip_norm: Optional[float] = 1.0,
@@ -105,10 +141,11 @@ class HfText2TextModel:
         import torch
 
         logs: List[str] = []
+        eval_batch_size = int(eval_batch_size or batch_size)
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=learning_rate)
         global_step = 0
-        self.model.train()
         for epoch in range(1, epochs + 1):
+            self.model.train()
             for batch in iter_batches(train_samples, batch_size):
                 examples = self.build_examples(batch)
                 inputs, labels = self._tokenize_batch(examples)
@@ -128,7 +165,7 @@ class HfText2TextModel:
                 logs.append(f"epoch={epoch} step={global_step} train_loss={float(loss.detach().cpu().item()):.6f}")
                 if max_train_steps is not None and global_step >= max_train_steps:
                     break
-            dev_output = self.forward(dev_samples)
+            dev_output = self.forward_in_batches(dev_samples, eval_batch_size)
             logs.append(f"epoch={epoch} dev_loss={dev_output.loss:.6f}")
             if max_train_steps is not None and global_step >= max_train_steps:
                 break
@@ -160,6 +197,8 @@ class HfText2TextModel:
         return inputs, labels
 
 
-def iter_batches(samples: List[Dict[str, str]], batch_size: int) -> List[Dict[str, str]]:
+def iter_batches(samples: List[Dict[str, str]], batch_size: int) -> Iterator[List[Dict[str, str]]]:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
     for start in range(0, len(samples), batch_size):
         yield samples[start : start + batch_size]

@@ -4,6 +4,7 @@ from typing import Any, Dict
 from src.stage1.backend_factory import build_stage1_model
 from src.stage1.data_io import read_json_config, read_jsonl, write_json, write_jsonl
 from src.stage1.metrics import evaluate_predictions, write_confusion_csv, write_per_class_csv
+from src.stage1.model_outputs import ModelOutput
 from src.stage1.runner import write_error_cases, write_prototype_analysis
 from src.stage1.schema import load_relation_schema
 
@@ -14,6 +15,7 @@ def run_training(config_path: str) -> Dict[str, Any]:
     train_samples = limit_samples(read_jsonl(config["train_file"]), config.get("max_train_samples"))
     dev_samples = limit_samples(read_jsonl(config["dev_file"]), config.get("max_dev_samples"))
     test_samples = limit_samples(read_jsonl(config["test_file"]), config.get("max_test_samples"))
+    validate_run_size(config_path, config, train_samples, dev_samples, test_samples)
 
     model = build_stage1_model(
         method=config["method"],
@@ -45,6 +47,7 @@ def run_training(config_path: str) -> Dict[str, Any]:
                 dev_samples=dev_samples,
                 epochs=int(config.get("epochs", 1)),
                 batch_size=int(config.get("batch_size", 2)),
+                eval_batch_size=int(config.get("eval_batch_size", config.get("batch_size", 2))),
                 learning_rate=float(config.get("learning_rate", 1e-4)),
                 max_train_steps=config.get("max_train_steps"),
                 gradient_clip_norm=config.get("gradient_clip_norm", 1.0),
@@ -54,8 +57,9 @@ def run_training(config_path: str) -> Dict[str, Any]:
     else:
         train_log.append("note=backend has no train_model method; executed deterministic smoke/evaluation pass.")
 
-    dev_output = model.forward(dev_samples)
-    test_output = model.forward(test_samples)
+    eval_batch_size = int(config.get("eval_batch_size", config.get("batch_size", 2)))
+    dev_output = forward_in_batches(model, dev_samples, eval_batch_size)
+    test_output = forward_in_batches(model, test_samples, eval_batch_size)
     evaluation = evaluate_predictions(
         test_output.predictions,
         relation_labels=schema.labels,
@@ -103,3 +107,75 @@ def limit_samples(samples: list[dict[str, str]], max_samples: Any) -> list[dict[
     if limit < 0:
         raise ValueError("max sample limits must be non-negative")
     return samples[:limit]
+
+
+def forward_in_batches(model: Any, samples: list[dict[str, str]], batch_size: int) -> ModelOutput:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    if not samples:
+        return ModelOutput(loss=0.0, generation_loss=0.0, alignment_loss=0.0, predictions=[])
+    if hasattr(model, "forward_in_batches"):
+        return model.forward_in_batches(samples, batch_size)
+
+    total_loss = 0.0
+    total_generation_loss = 0.0
+    total_alignment_loss = 0.0
+    total_items = 0
+    predictions = []
+    prototype_scores = []
+
+    for batch in iter_batches(samples, batch_size):
+        output = model.forward(batch)
+        weight = len(batch)
+        total_items += weight
+        total_loss += output.loss * weight
+        total_generation_loss += output.generation_loss * weight
+        total_alignment_loss += output.alignment_loss * weight
+        predictions.extend(output.predictions)
+        prototype_scores.extend(output.prototype_scores)
+
+    return ModelOutput(
+        loss=total_loss / total_items,
+        generation_loss=total_generation_loss / total_items,
+        alignment_loss=total_alignment_loss / total_items,
+        predictions=predictions,
+        prototype_scores=prototype_scores,
+    )
+
+
+def iter_batches(samples: list[dict[str, str]], batch_size: int):
+    for start in range(0, len(samples), batch_size):
+        yield samples[start : start + batch_size]
+
+
+def validate_run_size(
+    config_path: str,
+    config: Dict[str, Any],
+    train_samples: list[dict[str, str]],
+    dev_samples: list[dict[str, str]],
+    test_samples: list[dict[str, str]],
+) -> None:
+    if config.get("allow_small_full_run"):
+        return
+    marker = f"{config_path} {config.get('experiment_id', '')}".lower()
+    if "full" not in marker:
+        return
+    limited_keys = [
+        key
+        for key in ["max_train_steps", "max_train_samples", "max_dev_samples", "max_test_samples"]
+        if key in config
+    ]
+    split_sizes = {
+        "train": len(train_samples),
+        "dev": len(dev_samples),
+        "test": len(test_samples),
+    }
+    too_small = {split: size for split, size in split_sizes.items() if size < 100}
+    if limited_keys or too_small:
+        raise ValueError(
+            "This looks like a full run, but it is still using smoke limits or smoke-sized data. "
+            f"limited_keys={limited_keys}, split_sizes={split_sizes}. "
+            "For a real ChemProt full run, reconvert data without --max-samples-per-split and remove "
+            "max_train_steps/max_*_samples from the config. "
+            "Use allow_small_full_run=true only for intentional debugging."
+        )

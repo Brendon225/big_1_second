@@ -545,6 +545,66 @@ git status --short
 
 当前 `chemprot_hf_biobart_smoke.yaml` 是 smoke，不是正式实验。
 
+### 11.0 先确认 ChemProt 是否是全量 JSONL
+
+如果你看到训练结果里：
+
+```text
+train_samples = 30
+dev_samples = 30
+test_samples = 30
+```
+
+这说明你仍然在用本机 smoke 时转换出来的小样本 JSONL，不是正式 ChemProt 全量数据。
+
+先在 5090 上执行：
+
+```bash
+python - <<'PY'
+import json
+from pathlib import Path
+for split in ["train", "dev", "test"]:
+    path = Path(f"data/stage1/chemprot/{split}.jsonl")
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    labels = {}
+    for row in rows:
+        labels[row["gold_relation"]] = labels.get(row["gold_relation"], 0) + 1
+    print(split, len(rows), labels)
+PY
+```
+
+成功标志：
+
+正式实验不应该只有 30 条。若仍然是 30 条，重新转换全量数据：
+
+```bash
+python scripts/stage1/convert_chemprot.py --raw-dir data/stage1/raw/chemprot/extracted --output-dir data/stage1/chemprot --max-negative-per-doc 1
+```
+
+注意：
+
+不要带：
+
+```text
+--max-samples-per-split 30
+```
+
+重新检查：
+
+```bash
+python - <<'PY'
+import json
+from pathlib import Path
+for split in ["train", "dev", "test"]:
+    path = Path(f"data/stage1/chemprot/{split}.jsonl")
+    print(split, sum(1 for _ in path.open(encoding="utf-8")))
+PY
+```
+
+成功标志：
+
+`train/dev/test` 数量明显大于 30。
+
 正式实验必须新建 full config，例如：
 
 ```text
@@ -605,6 +665,17 @@ error_cases.md
 train_log.txt
 model/
 ```
+
+如果命令几秒内结束，并且 metrics 里仍然显示：
+
+```text
+train_samples = 30
+dev_samples = 30
+test_samples = 30
+valid_output_rate = 0.0
+```
+
+这不是正式实验成功，而是仍在跑 smoke 小数据。回到 `11.0` 重新转换全量 ChemProt。
 
 重要：
 

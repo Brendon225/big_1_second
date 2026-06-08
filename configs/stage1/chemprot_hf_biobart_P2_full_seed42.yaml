@@ -11,6 +11,7 @@
   "max_input_length": 512,
   "max_output_length": 32,
   "batch_size": 8,
+  "eval_batch_size": 2,
   "learning_rate": 0.00003,
   "gradient_clip_norm": 1.0,
   "train_file": "data/stage1/chemprot/train.jsonl",
