@@ -166,7 +166,7 @@ data/stage1/chemprot/test.jsonl
 cd /home/<your_user>/projects/big_1_second
 conda create -n rsg-biore python=3.10 -y
 conda activate rsg-biore
-pip install -r requirements-stage1.txt
+pip install -r requirements-stage1.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
 ```
 
 目的：
