@@ -133,6 +133,7 @@ class HfText2TextModel:
         epochs: int = 1,
         batch_size: int = 2,
         eval_batch_size: Optional[int] = None,
+        gradient_accumulation_steps: int = 1,
         learning_rate: float = 1e-4,
         max_train_steps: Optional[int] = None,
         gradient_clip_norm: Optional[float] = 1.0,
@@ -142,29 +143,60 @@ class HfText2TextModel:
 
         logs: List[str] = []
         eval_batch_size = int(eval_batch_size or batch_size)
+        gradient_accumulation_steps = max(1, int(gradient_accumulation_steps))
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=learning_rate)
         global_step = 0
         for epoch in range(1, epochs + 1):
             self.model.train()
+            optimizer.zero_grad()
+            accumulated_batches = 0
+            accumulated_loss = 0.0
             for batch in iter_batches(train_samples, batch_size):
                 examples = self.build_examples(batch)
                 inputs, labels = self._tokenize_batch(examples)
                 labels[labels == self.tokenizer.pad_token_id] = -100
-                optimizer.zero_grad()
                 output = self.model(**inputs, labels=labels)
                 loss = output.loss
                 if not torch.isfinite(loss):
                     logs.append(f"epoch={epoch} step={global_step + 1} train_loss=non_finite skipped=true")
                     optimizer.zero_grad()
+                    accumulated_batches = 0
+                    accumulated_loss = 0.0
                     continue
-                loss.backward()
-                if gradient_clip_norm is not None:
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), float(gradient_clip_norm))
-                optimizer.step()
-                global_step += 1
-                logs.append(f"epoch={epoch} step={global_step} train_loss={float(loss.detach().cpu().item()):.6f}")
-                if max_train_steps is not None and global_step >= max_train_steps:
-                    break
+                loss_value = float(loss.detach().cpu().item())
+                (loss / gradient_accumulation_steps).backward()
+                accumulated_batches += 1
+                accumulated_loss += loss_value
+                if accumulated_batches >= gradient_accumulation_steps:
+                    global_step = self._optimizer_step(
+                        optimizer=optimizer,
+                        torch_module=torch,
+                        gradient_clip_norm=gradient_clip_norm,
+                        global_step=global_step,
+                    )
+                    logs.append(
+                        "epoch="
+                        f"{epoch} step={global_step} "
+                        f"train_loss={accumulated_loss / accumulated_batches:.6f} "
+                        f"micro_batches={accumulated_batches}"
+                    )
+                    accumulated_batches = 0
+                    accumulated_loss = 0.0
+                    if max_train_steps is not None and global_step >= max_train_steps:
+                        break
+            if accumulated_batches and (max_train_steps is None or global_step < max_train_steps):
+                global_step = self._optimizer_step(
+                    optimizer=optimizer,
+                    torch_module=torch,
+                    gradient_clip_norm=gradient_clip_norm,
+                    global_step=global_step,
+                )
+                logs.append(
+                    "epoch="
+                    f"{epoch} step={global_step} "
+                    f"train_loss={accumulated_loss / accumulated_batches:.6f} "
+                    f"micro_batches={accumulated_batches}"
+                )
             dev_output = self.forward_in_batches(dev_samples, eval_batch_size)
             logs.append(f"epoch={epoch} dev_loss={dev_output.loss:.6f}")
             if max_train_steps is not None and global_step >= max_train_steps:
@@ -176,6 +208,19 @@ class HfText2TextModel:
             self.tokenizer.save_pretrained(target)
             logs.append(f"saved_model={target}")
         return logs
+
+    def _optimizer_step(
+        self,
+        optimizer: Any,
+        torch_module: Any,
+        gradient_clip_norm: Optional[float],
+        global_step: int,
+    ) -> int:
+        if gradient_clip_norm is not None:
+            torch_module.nn.utils.clip_grad_norm_(self.model.parameters(), float(gradient_clip_norm))
+        optimizer.step()
+        optimizer.zero_grad()
+        return global_step + 1
 
     def _tokenize_batch(self, examples: List[Dict[str, str]]) -> tuple[Dict[str, Any], Any]:
         inputs = self.tokenizer(

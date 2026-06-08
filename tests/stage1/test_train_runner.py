@@ -20,6 +20,16 @@ class RecordingForwardModel:
         )
 
 
+class RecordingTrainModel(RecordingForwardModel):
+    def __init__(self):
+        super().__init__()
+        self.train_kwargs = None
+
+    def train_model(self, **kwargs):
+        self.train_kwargs = kwargs
+        return ["trained=true"]
+
+
 class TrainRunnerTest(unittest.TestCase):
     def test_forward_in_batches_splits_evaluation_batches_and_aggregates_loss(self):
         from src.stage1.train_runner import forward_in_batches
@@ -33,6 +43,50 @@ class TrainRunnerTest(unittest.TestCase):
         self.assertEqual(len(output.predictions), 5)
         self.assertAlmostEqual(output.loss, 1.8)
         self.assertAlmostEqual(output.generation_loss, 2.3)
+
+    def test_train_runner_passes_low_memory_training_controls(self):
+        import src.stage1.train_runner as runner_module
+
+        model = RecordingTrainModel()
+        original_builder = runner_module.build_stage1_model
+        runner_module.build_stage1_model = lambda **_kwargs: model
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                output_dir = Path(tmp) / "run"
+                config_path = Path(tmp) / "config.json"
+                config_path.write_text(
+                    json.dumps(
+                        {
+                            "experiment_id": "tiny_fake_train",
+                            "dataset": "TinyChemProtSmoke",
+                            "model": "fake-seq2seq",
+                            "method": "P2_entity_type_description",
+                            "backend": "fake_train",
+                            "semantic_field": "entity_type_aware_description",
+                            "schema_file": "data/stage1/tiny/relation_schema.yaml",
+                            "train_file": "data/stage1/tiny/train.jsonl",
+                            "dev_file": "data/stage1/tiny/dev.jsonl",
+                            "test_file": "data/stage1/tiny/test.jsonl",
+                            "output_dir": str(output_dir),
+                            "epochs": 1,
+                            "batch_size": 2,
+                            "eval_batch_size": 1,
+                            "gradient_accumulation_steps": 4,
+                            "max_train_samples": 2,
+                            "max_dev_samples": 1,
+                            "max_test_samples": 1,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                runner_module.run_training(str(config_path))
+        finally:
+            runner_module.build_stage1_model = original_builder
+
+        self.assertEqual(model.train_kwargs["batch_size"], 2)
+        self.assertEqual(model.train_kwargs["eval_batch_size"], 1)
+        self.assertEqual(model.train_kwargs["gradient_accumulation_steps"], 4)
 
     def test_train_runner_uses_fake_backend_and_writes_outputs(self):
         from src.stage1.train_runner import run_training

@@ -48,6 +48,7 @@ def run_training(config_path: str) -> Dict[str, Any]:
                 epochs=int(config.get("epochs", 1)),
                 batch_size=int(config.get("batch_size", 2)),
                 eval_batch_size=int(config.get("eval_batch_size", config.get("batch_size", 2))),
+                gradient_accumulation_steps=int(config.get("gradient_accumulation_steps", 1)),
                 learning_rate=float(config.get("learning_rate", 1e-4)),
                 max_train_steps=config.get("max_train_steps"),
                 gradient_clip_norm=config.get("gradient_clip_norm", 1.0),
