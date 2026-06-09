@@ -28,6 +28,7 @@ def build_stage1_model(
             max_input_length=int(kwargs.get("max_input_length", 512)),
             max_output_length=int(kwargs.get("max_output_length", 32)),
             device=kwargs.get("device"),
+            model_dtype=kwargs.get("model_dtype", "float32"),
         )
     raise ValueError(f"Unknown backend: {backend}")
 

@@ -23,6 +23,7 @@ class HfText2TextModel:
         max_input_length: int = 512,
         max_output_length: int = 32,
         device: Optional[str] = None,
+        model_dtype: str = "float32",
     ) -> None:
         import torch
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -33,9 +34,26 @@ class HfText2TextModel:
         self.max_input_length = max_input_length
         self.max_output_length = max_output_length
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.model_dtype = model_dtype
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path)
+        self._apply_model_dtype(torch, model_dtype)
         self.model.to(self.device)
+
+    def _apply_model_dtype(self, torch_module: Any, model_dtype: str) -> None:
+        normalized = str(model_dtype).lower()
+        if normalized in {"auto", "as_loaded", "none"}:
+            return
+        if normalized in {"float32", "fp32"}:
+            self.model.float()
+            return
+        if normalized in {"float16", "fp16"}:
+            self.model.half()
+            return
+        if normalized in {"bfloat16", "bf16"}:
+            self.model.to(dtype=torch_module.bfloat16)
+            return
+        raise ValueError(f"Unknown model_dtype: {model_dtype}")
 
     def build_examples(self, samples: List[Dict[str, str]]) -> List[Dict[str, str]]:
         return [
@@ -136,6 +154,7 @@ class HfText2TextModel:
         gradient_accumulation_steps: int = 1,
         learning_rate: float = 1e-4,
         max_train_steps: Optional[int] = None,
+        max_non_finite_batches: int = 10,
         gradient_clip_norm: Optional[float] = 1.0,
         output_dir: Optional[str] = None,
     ) -> List[str]:
@@ -144,8 +163,12 @@ class HfText2TextModel:
         logs: List[str] = []
         eval_batch_size = int(eval_batch_size or batch_size)
         gradient_accumulation_steps = max(1, int(gradient_accumulation_steps))
+        max_non_finite_batches = max(1, int(max_non_finite_batches))
+        logs.append(f"model_dtype={self.model_dtype}")
+        logs.append(f"parameter_dtype={next(self.model.parameters()).dtype}")
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=learning_rate)
         global_step = 0
+        non_finite_batches = 0
         for epoch in range(1, epochs + 1):
             self.model.train()
             optimizer.zero_grad()
@@ -158,11 +181,18 @@ class HfText2TextModel:
                 output = self.model(**inputs, labels=labels)
                 loss = output.loss
                 if not torch.isfinite(loss):
+                    non_finite_batches += 1
                     logs.append(f"epoch={epoch} step={global_step + 1} train_loss=non_finite skipped=true")
                     optimizer.zero_grad()
                     accumulated_batches = 0
                     accumulated_loss = 0.0
+                    if non_finite_batches >= max_non_finite_batches:
+                        raise RuntimeError(
+                            "Training stopped because non-finite loss repeated "
+                            f"{non_finite_batches} times. Check model_dtype, learning_rate, and input labels."
+                        )
                     continue
+                non_finite_batches = 0
                 loss_value = float(loss.detach().cpu().item())
                 (loss / gradient_accumulation_steps).backward()
                 accumulated_batches += 1

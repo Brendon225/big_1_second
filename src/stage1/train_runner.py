@@ -29,6 +29,7 @@ def run_training(config_path: str) -> Dict[str, Any]:
         max_input_length=config.get("max_input_length", 512),
         max_output_length=config.get("max_output_length", 32),
         device=config.get("device"),
+        model_dtype=config.get("model_dtype", "float32"),
     )
 
     train_log = [
@@ -51,6 +52,7 @@ def run_training(config_path: str) -> Dict[str, Any]:
                 gradient_accumulation_steps=int(config.get("gradient_accumulation_steps", 1)),
                 learning_rate=float(config.get("learning_rate", 1e-4)),
                 max_train_steps=config.get("max_train_steps"),
+                max_non_finite_batches=int(config.get("max_non_finite_batches", 10)),
                 gradient_clip_norm=config.get("gradient_clip_norm", 1.0),
                 output_dir=config.get("output_dir"),
             )

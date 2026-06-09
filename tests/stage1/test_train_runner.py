@@ -48,8 +48,14 @@ class TrainRunnerTest(unittest.TestCase):
         import src.stage1.train_runner as runner_module
 
         model = RecordingTrainModel()
+        build_kwargs = {}
         original_builder = runner_module.build_stage1_model
-        runner_module.build_stage1_model = lambda **_kwargs: model
+
+        def record_builder(**kwargs):
+            build_kwargs.update(kwargs)
+            return model
+
+        runner_module.build_stage1_model = record_builder
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 output_dir = Path(tmp) / "run"
@@ -72,6 +78,8 @@ class TrainRunnerTest(unittest.TestCase):
                             "batch_size": 2,
                             "eval_batch_size": 1,
                             "gradient_accumulation_steps": 4,
+                            "model_dtype": "float32",
+                            "max_non_finite_batches": 3,
                             "max_train_samples": 2,
                             "max_dev_samples": 1,
                             "max_test_samples": 1,
@@ -87,6 +95,8 @@ class TrainRunnerTest(unittest.TestCase):
         self.assertEqual(model.train_kwargs["batch_size"], 2)
         self.assertEqual(model.train_kwargs["eval_batch_size"], 1)
         self.assertEqual(model.train_kwargs["gradient_accumulation_steps"], 4)
+        self.assertEqual(model.train_kwargs["max_non_finite_batches"], 3)
+        self.assertEqual(build_kwargs["model_dtype"], "float32")
 
     def test_train_runner_uses_fake_backend_and_writes_outputs(self):
         from src.stage1.train_runner import run_training
