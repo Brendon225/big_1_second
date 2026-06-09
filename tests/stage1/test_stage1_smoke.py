@@ -63,6 +63,29 @@ class Stage1SmokeTest(unittest.TestCase):
         self.assertAlmostEqual(result.metrics["prototype_top3_accuracy"], 1.0)
         self.assertIn("CPR:5", result.per_class)
 
+    def test_metrics_include_no_relation_diagnostics(self):
+        from src.stage1.metrics import evaluate_predictions
+
+        records = [
+            {"gold_label": "CPR:4", "pred_label": "CPR:4", "valid_output": True, "relation_valid": True},
+            {"gold_label": "NO_RELATION", "pred_label": "CPR:4", "valid_output": True, "relation_valid": True},
+            {"gold_label": "NO_RELATION", "pred_label": "NO_RELATION", "valid_output": True, "relation_valid": True},
+            {"gold_label": "CPR:5", "pred_label": "NO_RELATION", "valid_output": True, "relation_valid": True},
+        ]
+
+        result = evaluate_predictions(
+            records,
+            relation_labels=["CPR:4", "CPR:5", "NO_RELATION"],
+            no_relation_labels=["NO_RELATION"],
+        )
+
+        self.assertAlmostEqual(result.metrics["overall_accuracy"], 0.5)
+        self.assertAlmostEqual(result.metrics["no_relation_precision"], 0.5)
+        self.assertAlmostEqual(result.metrics["no_relation_recall"], 0.5)
+        self.assertAlmostEqual(result.metrics["no_relation_f1"], 0.5)
+        self.assertAlmostEqual(result.metrics["positive_support"], 2.0)
+        self.assertAlmostEqual(result.metrics["no_relation_support"], 2.0)
+
     def test_text2text_baseline_mock_forward(self):
         from src.stage1.data_io import read_jsonl
         from src.stage1.models.text2text_baseline import Text2TextBaseline

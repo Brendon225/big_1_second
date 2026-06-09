@@ -64,6 +64,8 @@ def evaluate_predictions(
     rare_macro_f1 = sum(rare_values) / max(len(rare_values), 1)
     valid_count = sum(1 for item in records if item.get("valid_output"))
     relation_valid_count = sum(1 for item in records if item.get("relation_valid"))
+    overall_correct = sum(1 for item in records if item.get("gold_label") == item.get("pred_label"))
+    no_relation_stats = aggregate_label_group(records, no_relation_labels)
 
     prototype_available = [item for item in records if item.get("prototype_topk")]
     prototype_top1 = sum(1 for item in prototype_available if item.get("prototype_top1") == item.get("gold_label"))
@@ -81,11 +83,34 @@ def evaluate_predictions(
         "rare_relation_macro_f1": rare_macro_f1,
         "valid_output_rate": valid_count / max(len(records), 1),
         "relation_validity_rate": relation_valid_count / max(len(records), 1),
+        "overall_accuracy": overall_correct / max(len(records), 1),
+        "positive_support": float(sum(1 for item in records if item.get("gold_label") in positive_labels)),
+        "no_relation_support": float(no_relation_stats["support"]),
+        "no_relation_precision": no_relation_stats["precision"],
+        "no_relation_recall": no_relation_stats["recall"],
+        "no_relation_f1": no_relation_stats["f1"],
         "prototype_top1_accuracy": prototype_top1 / max(len(prototype_available), 1),
         "prototype_top3_accuracy": prototype_top3 / max(len(prototype_available), 1),
         "generation_vs_prototype_agreement": agreement_count / max(len(agreement_items), 1),
     }
     return EvaluationResult(metrics=metrics, per_class=per_class, confusion=build_confusion(records, relation_labels))
+
+
+def aggregate_label_group(records: List[Dict[str, Any]], labels: List[str]) -> Dict[str, float]:
+    label_set = set(labels)
+    if not label_set:
+        return {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0.0}
+    tp = sum(1 for item in records if item.get("gold_label") in label_set and item.get("pred_label") in label_set)
+    fp = sum(1 for item in records if item.get("gold_label") not in label_set and item.get("pred_label") in label_set)
+    fn = sum(1 for item in records if item.get("gold_label") in label_set and item.get("pred_label") not in label_set)
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    return {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1_score(precision, recall),
+        "support": float(tp + fn),
+    }
 
 
 def build_confusion(records: List[Dict[str, Any]], relation_labels: List[str]) -> Dict[str, Dict[str, int]]:
