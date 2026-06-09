@@ -166,7 +166,7 @@ class HfText2TextModel:
         max_non_finite_batches = max(1, int(max_non_finite_batches))
         logs.append(f"model_dtype={self.model_dtype}")
         logs.append(f"parameter_dtype={next(self.model.parameters()).dtype}")
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.AdamW(self.trainable_parameters(), lr=learning_rate)
         global_step = 0
         non_finite_batches = 0
         for epoch in range(1, epochs + 1):
@@ -175,11 +175,8 @@ class HfText2TextModel:
             accumulated_batches = 0
             accumulated_loss = 0.0
             for batch in iter_batches(train_samples, batch_size):
-                examples = self.build_examples(batch)
-                inputs, labels = self._tokenize_batch(examples)
-                labels[labels == self.tokenizer.pad_token_id] = -100
-                output = self.model(**inputs, labels=labels)
-                loss = output.loss
+                loss_items = self.compute_training_loss(batch)
+                loss = loss_items["loss"]
                 if not torch.isfinite(loss):
                     non_finite_batches += 1
                     logs.append(f"epoch={epoch} step={global_step + 1} train_loss=non_finite skipped=true")
@@ -209,6 +206,7 @@ class HfText2TextModel:
                         f"{epoch} step={global_step} "
                         f"train_loss={accumulated_loss / accumulated_batches:.6f} "
                         f"micro_batches={accumulated_batches}"
+                        f"{self.format_training_loss_items(loss_items)}"
                     )
                     accumulated_batches = 0
                     accumulated_loss = 0.0
@@ -226,6 +224,7 @@ class HfText2TextModel:
                     f"{epoch} step={global_step} "
                     f"train_loss={accumulated_loss / accumulated_batches:.6f} "
                     f"micro_batches={accumulated_batches}"
+                    f"{self.format_training_loss_items(loss_items)}"
                 )
             dev_output = self.forward_in_batches(dev_samples, eval_batch_size)
             logs.append(f"epoch={epoch} dev_loss={dev_output.loss:.6f}")
@@ -236,8 +235,32 @@ class HfText2TextModel:
             target.mkdir(parents=True, exist_ok=True)
             self.model.save_pretrained(target)
             self.tokenizer.save_pretrained(target)
+            self.save_extra_state(target)
             logs.append(f"saved_model={target}")
         return logs
+
+    def trainable_parameters(self) -> Any:
+        return self.model.parameters()
+
+    def compute_training_loss(self, batch: List[Dict[str, str]]) -> Dict[str, Any]:
+        examples = self.build_examples(batch)
+        inputs, labels = self._tokenize_batch(examples)
+        labels[labels == self.tokenizer.pad_token_id] = -100
+        output = self.model(**inputs, labels=labels)
+        return {"loss": output.loss, "generation_loss": output.loss, "alignment_loss": None}
+
+    def format_training_loss_items(self, loss_items: Dict[str, Any]) -> str:
+        alignment_loss = loss_items.get("alignment_loss")
+        if alignment_loss is None:
+            return ""
+        generation_loss = loss_items["generation_loss"]
+        return (
+            f" generation_loss={float(generation_loss.detach().cpu().item()):.6f}"
+            f" alignment_loss={float(alignment_loss.detach().cpu().item()):.6f}"
+        )
+
+    def save_extra_state(self, target: Path) -> None:
+        return None
 
     def _optimizer_step(
         self,

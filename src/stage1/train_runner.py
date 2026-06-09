@@ -25,6 +25,7 @@ def run_training(config_path: str) -> Dict[str, Any]:
         alignment_lambda=config.get("alignment_lambda", 0.1),
         temperature_tau=config.get("temperature_tau", 0.1),
         prototype_type=config.get("prototype_type", "learnable"),
+        prototype_semantic_field=config.get("prototype_semantic_field"),
         model_name_or_path=config.get("model_name_or_path", config.get("model", "t5-small")),
         max_input_length=config.get("max_input_length", 512),
         max_output_length=config.get("max_output_length", 32),

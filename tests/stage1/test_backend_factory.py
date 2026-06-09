@@ -41,6 +41,18 @@ class BackendFactoryTest(unittest.TestCase):
         self.assertIn("stage1_definitely_missing_dependency", message)
         self.assertIn("requirements-stage1.txt", message)
 
+    def test_backend_factory_recognizes_hf_rsg_backend(self):
+        import src.stage1.backend_factory as backend_factory
+
+        original_require = backend_factory.require_modules
+        backend_factory.require_modules = lambda *_args, **_kwargs: None
+        try:
+            backend_class = backend_factory.resolve_hf_backend_class("hf_rsg")
+        finally:
+            backend_factory.require_modules = original_require
+
+        self.assertEqual(backend_class.__name__, "HfRsgBioREModel")
+
 
 if __name__ == "__main__":
     unittest.main()

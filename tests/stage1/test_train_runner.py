@@ -80,6 +80,10 @@ class TrainRunnerTest(unittest.TestCase):
                             "gradient_accumulation_steps": 4,
                             "model_dtype": "float32",
                             "max_non_finite_batches": 3,
+                            "alignment_lambda": 0.2,
+                            "temperature_tau": 0.07,
+                            "prototype_type": "learnable",
+                            "prototype_semantic_field": "knowledge_enhanced_description",
                             "max_train_samples": 2,
                             "max_dev_samples": 1,
                             "max_test_samples": 1,
@@ -97,6 +101,10 @@ class TrainRunnerTest(unittest.TestCase):
         self.assertEqual(model.train_kwargs["gradient_accumulation_steps"], 4)
         self.assertEqual(model.train_kwargs["max_non_finite_batches"], 3)
         self.assertEqual(build_kwargs["model_dtype"], "float32")
+        self.assertEqual(build_kwargs["alignment_lambda"], 0.2)
+        self.assertEqual(build_kwargs["temperature_tau"], 0.07)
+        self.assertEqual(build_kwargs["prototype_type"], "learnable")
+        self.assertEqual(build_kwargs["prototype_semantic_field"], "knowledge_enhanced_description")
 
     def test_train_runner_uses_fake_backend_and_writes_outputs(self):
         from src.stage1.train_runner import run_training
