@@ -53,6 +53,18 @@ class BackendFactoryTest(unittest.TestCase):
 
         self.assertEqual(backend_class.__name__, "HfRsgBioREModel")
 
+    def test_rsg_fusion_falls_back_to_prototype_for_invalid_generation(self):
+        from src.stage1.hf_rsg_biore_backend import HfRsgBioREModel
+
+        model = HfRsgBioREModel.__new__(HfRsgBioREModel)
+        model.use_prototype_fusion = True
+        model.prototype_fusion_alpha = 2.0
+        model.label_to_id = {"CPR:4": 0, "NO_RELATION": 1}
+
+        label = model.fuse_prediction(None, {"CPR:4": 0.1, "NO_RELATION": 0.3})
+
+        self.assertEqual(label, "NO_RELATION")
+
 
 if __name__ == "__main__":
     unittest.main()

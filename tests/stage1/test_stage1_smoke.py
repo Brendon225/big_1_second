@@ -27,6 +27,28 @@ class Stage1SmokeTest(unittest.TestCase):
         self.assertEqual(parse_relation_output("relation: CPR:4", schema.labels), ("CPR:4", True, True))
         self.assertEqual(parse_relation_output("CPR:4", schema.labels), (None, False, False))
 
+    def test_marked_relation_prompt_adds_entity_markers(self):
+        from src.stage1.prompting import build_marked_relation_prompt
+        from src.stage1.schema import load_relation_schema
+
+        schema = load_relation_schema("data/stage1/tiny/relation_schema.yaml")
+        sample = {
+            "id": "tiny_001",
+            "text": "Aspirin inhibits COX1 activity.",
+            "head_entity": "Aspirin",
+            "head_type": "chemical",
+            "tail_entity": "COX1",
+            "tail_type": "protein",
+            "gold_relation": "CPR:4",
+            "split": "test",
+        }
+
+        prompt = build_marked_relation_prompt(sample, schema, semantic_field="relation_description")
+
+        self.assertIn("<H> Aspirin </H>", prompt)
+        self.assertIn("<T> COX1 </T>", prompt)
+        self.assertIn("Relation schema:", prompt)
+
     def test_metrics_include_generation_and_prototype_fields(self):
         from src.stage1.metrics import evaluate_predictions
 

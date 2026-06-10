@@ -37,6 +37,10 @@ def build_stage1_model(
                     "temperature_tau": float(kwargs.get("temperature_tau", 0.1)),
                     "prototype_type": kwargs.get("prototype_type", "learnable"),
                     "prototype_semantic_field": kwargs.get("prototype_semantic_field"),
+                    "instance_pooling": kwargs.get("instance_pooling", "mean"),
+                    "use_entity_markers": bool(kwargs.get("use_entity_markers", False)),
+                    "use_prototype_fusion": bool(kwargs.get("use_prototype_fusion", False)),
+                    "prototype_fusion_alpha": float(kwargs.get("prototype_fusion_alpha", 0.0)),
                 }
             )
         return backend_class(**init_kwargs)

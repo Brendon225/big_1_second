@@ -5,7 +5,7 @@ from src.stage1.hf_text2text_backend import HfText2TextModel
 from src.stage1.metrics import parse_relation_output
 from src.stage1.model_outputs import ModelOutput
 from src.stage1.numeric_utils import finite_or_default
-from src.stage1.prompting import build_target_text
+from src.stage1.prompting import build_marked_relation_prompt, build_target_text
 from src.stage1.schema import RelationSchema
 
 
@@ -25,6 +25,10 @@ class HfRsgBioREModel(HfText2TextModel):
         temperature_tau: float = 0.1,
         prototype_type: str = "learnable",
         prototype_semantic_field: Optional[str] = None,
+        instance_pooling: str = "mean",
+        use_entity_markers: bool = False,
+        use_prototype_fusion: bool = False,
+        prototype_fusion_alpha: float = 0.0,
     ) -> None:
         import torch
 
@@ -43,6 +47,23 @@ class HfRsgBioREModel(HfText2TextModel):
         self.temperature_tau = float(temperature_tau)
         self.prototype_type = prototype_type
         self.prototype_semantic_field = prototype_semantic_field or semantic_field
+        self.instance_pooling = instance_pooling
+        self.use_entity_markers = bool(use_entity_markers)
+        self.use_prototype_fusion = bool(use_prototype_fusion)
+        self.prototype_fusion_alpha = float(prototype_fusion_alpha)
+        self.marker_token_ids: Dict[str, int] = {}
+        if self.use_entity_markers:
+            added = self.tokenizer.add_special_tokens(
+                {"additional_special_tokens": ["<H>", "</H>", "<T>", "</T>"]}
+            )
+            if added:
+                self.model.resize_token_embeddings(len(self.tokenizer))
+                self._apply_model_dtype(torch, model_dtype)
+                self.model.to(self.device)
+            self.marker_token_ids = {
+                token: int(self.tokenizer.convert_tokens_to_ids(token))
+                for token in ["<H>", "</H>", "<T>", "</T>"]
+            }
         self.labels = list(schema.labels)
         self.label_to_id = {label: index for index, label in enumerate(self.labels)}
         hidden_size = int(getattr(self.model.config, "d_model", getattr(self.model.config, "hidden_size", 768)))
@@ -105,24 +126,34 @@ class HfRsgBioREModel(HfText2TextModel):
         prototype_rows = []
         mismatches = 0
         for row_index, (example, raw_output) in enumerate(zip(examples, raw_outputs)):
-            pred_label, valid_output, relation_valid = parse_relation_output(raw_output, self.schema.labels)
-            if pred_label != example["gold_label"]:
-                mismatches += 1
+            generated_label, generated_valid, generated_relation_valid = parse_relation_output(
+                raw_output, self.schema.labels
+            )
             score_values = scores[row_index].detach().cpu().tolist()
             score_map = {label: float(score_values[index]) for index, label in enumerate(self.labels)}
             sorted_scores = sorted(score_map.items(), key=lambda item: item[1], reverse=True)
             top_labels = [label for label, _score in sorted_scores[:3]]
             prototype_top1 = top_labels[0]
+            pred_label = self.fuse_prediction(generated_label, score_map)
+            raw_prediction_output = f"relation: {pred_label}" if pred_label is not None else raw_output
+            pred_label, valid_output, relation_valid = parse_relation_output(raw_prediction_output, self.schema.labels)
+            if pred_label != example["gold_label"]:
+                mismatches += 1
             predictions.append(
                 {
                     "id": example["id"],
                     "gold_label": example["gold_label"],
                     "pred_label": pred_label,
-                    "raw_output": raw_output,
+                    "raw_output": raw_prediction_output,
                     "valid_output": valid_output,
                     "relation_valid": relation_valid,
+                    "generated_label": generated_label,
+                    "raw_generation_output": raw_output,
+                    "generation_valid_output": generated_valid,
+                    "generation_relation_valid": generated_relation_valid,
                     "prototype_top1": prototype_top1,
                     "prototype_topk": top_labels,
+                    "prototype_fusion_applied": self.use_prototype_fusion,
                 }
             )
             prototype_rows.append(
@@ -151,15 +182,22 @@ class HfRsgBioREModel(HfText2TextModel):
         )
 
     def build_examples(self, samples: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        examples = super().build_examples(samples)
-        for example, sample in zip(examples, samples):
-            example["target_text"] = build_target_text(sample)
-        return examples
+        if not self.use_entity_markers:
+            return super().build_examples(samples)
+        return [
+            {
+                "id": sample["id"],
+                "input_text": build_marked_relation_prompt(sample, self.schema, self.semantic_field),
+                "target_text": build_target_text(sample),
+                "gold_label": sample["gold_relation"],
+            }
+            for sample in samples
+        ]
 
     def compute_alignment_loss(self, examples: List[Dict[str, str]], inputs: Dict[str, Any]) -> tuple[Any, Any, Any]:
         import torch
 
-        instance_vectors = self.encode_inputs(inputs)
+        instance_vectors = self.encode_inputs(inputs, self.instance_pooling)
         instance_vectors = torch.nn.functional.normalize(self.instance_projection(instance_vectors), dim=-1)
         prototypes = torch.nn.functional.normalize(self.build_relation_prototypes(), dim=-1)
         scores = instance_vectors @ prototypes.transpose(0, 1)
@@ -177,9 +215,19 @@ class HfRsgBioREModel(HfText2TextModel):
         offsets = self.prototype_offsets(torch.arange(len(self.labels), device=self.device))
         return self.prototype_norm(projected + offsets)
 
-    def encode_inputs(self, inputs: Dict[str, Any]) -> Any:
+    def encode_inputs(self, inputs: Dict[str, Any], pooling: str = "mean") -> Any:
         encoder = self.model.get_encoder()
         outputs = encoder(**inputs)
+        if pooling == "entity_pair" and self.marker_token_ids:
+            return marker_pair_pool(
+                outputs.last_hidden_state,
+                inputs["input_ids"],
+                inputs["attention_mask"],
+                self.marker_token_ids["<H>"],
+                self.marker_token_ids["<T>"],
+            )
+        if pooling != "mean":
+            raise ValueError(f"Unknown instance_pooling: {pooling}")
         return masked_mean_pool(outputs.last_hidden_state, inputs["attention_mask"])
 
     def encode_texts(self, texts: List[str], max_length: int) -> Any:
@@ -191,7 +239,18 @@ class HfRsgBioREModel(HfText2TextModel):
             return_tensors="pt",
         )
         tokenized = {key: value.to(self.device) for key, value in tokenized.items()}
-        return self.encode_inputs(tokenized)
+        return self.encode_inputs(tokenized, "mean")
+
+    def fuse_prediction(self, generated_label: Optional[str], score_map: Dict[str, float]) -> Optional[str]:
+        if not self.use_prototype_fusion:
+            return generated_label
+        if generated_label not in self.label_to_id:
+            return max(score_map.items(), key=lambda item: item[1])[0]
+        fused_scores = {
+            label: (1.0 if label == generated_label else 0.0) + self.prototype_fusion_alpha * score
+            for label, score in score_map.items()
+        }
+        return max(fused_scores.items(), key=lambda item: item[1])[0]
 
     def save_extra_state(self, target: Path) -> None:
         import torch
@@ -206,6 +265,10 @@ class HfRsgBioREModel(HfText2TextModel):
                 "temperature_tau": self.temperature_tau,
                 "prototype_type": self.prototype_type,
                 "prototype_semantic_field": self.prototype_semantic_field,
+                "instance_pooling": self.instance_pooling,
+                "use_entity_markers": self.use_entity_markers,
+                "use_prototype_fusion": self.use_prototype_fusion,
+                "prototype_fusion_alpha": self.prototype_fusion_alpha,
                 "labels": self.labels,
             },
             target / "rsg_head.pt",
@@ -217,3 +280,21 @@ def masked_mean_pool(hidden_states: Any, attention_mask: Any) -> Any:
     summed = (hidden_states * mask).sum(dim=1)
     denominator = mask.sum(dim=1).clamp(min=1.0)
     return summed / denominator
+
+
+def marker_pair_pool(hidden_states: Any, input_ids: Any, attention_mask: Any, head_marker_id: int, tail_marker_id: int) -> Any:
+    import torch
+
+    rows = []
+    fallback = masked_mean_pool(hidden_states, attention_mask)
+    for row_index in range(input_ids.shape[0]):
+        row_ids = input_ids[row_index]
+        head_positions = (row_ids == head_marker_id).nonzero(as_tuple=False)
+        tail_positions = (row_ids == tail_marker_id).nonzero(as_tuple=False)
+        if len(head_positions) and len(tail_positions):
+            head_vector = hidden_states[row_index, int(head_positions[0].item())]
+            tail_vector = hidden_states[row_index, int(tail_positions[0].item())]
+            rows.append((head_vector + tail_vector) / 2.0)
+        else:
+            rows.append(fallback[row_index])
+    return torch.stack(rows, dim=0)

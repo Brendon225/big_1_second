@@ -84,6 +84,10 @@ class TrainRunnerTest(unittest.TestCase):
                             "temperature_tau": 0.07,
                             "prototype_type": "learnable",
                             "prototype_semantic_field": "knowledge_enhanced_description",
+                            "instance_pooling": "entity_pair",
+                            "use_entity_markers": True,
+                            "use_prototype_fusion": True,
+                            "prototype_fusion_alpha": 0.2,
                             "max_train_samples": 2,
                             "max_dev_samples": 1,
                             "max_test_samples": 1,
@@ -105,6 +109,10 @@ class TrainRunnerTest(unittest.TestCase):
         self.assertEqual(build_kwargs["temperature_tau"], 0.07)
         self.assertEqual(build_kwargs["prototype_type"], "learnable")
         self.assertEqual(build_kwargs["prototype_semantic_field"], "knowledge_enhanced_description")
+        self.assertEqual(build_kwargs["instance_pooling"], "entity_pair")
+        self.assertEqual(build_kwargs["use_entity_markers"], True)
+        self.assertEqual(build_kwargs["use_prototype_fusion"], True)
+        self.assertEqual(build_kwargs["prototype_fusion_alpha"], 0.2)
 
     def test_train_runner_uses_fake_backend_and_writes_outputs(self):
         from src.stage1.train_runner import run_training
