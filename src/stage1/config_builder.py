@@ -1,8 +1,8 @@
 import copy
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Mapping
 
 
 @dataclass(frozen=True)
@@ -10,6 +10,8 @@ class BackboneSpec:
     slug: str
     model_name: str
     local_model_dir: str
+    config_overrides: Mapping[str, Any] = field(default_factory=dict)
+    backend_overrides: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
 
 SCIFIVE_BASE_PUBMED_PMC = BackboneSpec(
@@ -17,6 +19,35 @@ SCIFIVE_BASE_PUBMED_PMC = BackboneSpec(
     model_name="razent/SciFive-base-Pubmed_PMC",
     local_model_dir="models/stage1/scifive-base-pubmed-pmc",
 )
+
+
+SCIFIVE_LARGE_PUBMED_PMC = BackboneSpec(
+    slug="scifive_large",
+    model_name="razent/SciFive-large-Pubmed_PMC",
+    local_model_dir="models/stage1/scifive-large-pubmed-pmc",
+    config_overrides={
+        "model_dtype": "bfloat16",
+        "learning_rate": 0.00002,
+    },
+    backend_overrides={
+        "hf": {
+            "batch_size": 2,
+            "eval_batch_size": 1,
+            "gradient_accumulation_steps": 4,
+        },
+        "hf_rsg": {
+            "batch_size": 1,
+            "eval_batch_size": 1,
+            "gradient_accumulation_steps": 8,
+        },
+    },
+)
+
+
+BACKBONES = {
+    "scifive-base": SCIFIVE_BASE_PUBMED_PMC,
+    "scifive-large": SCIFIVE_LARGE_PUBMED_PMC,
+}
 
 
 def read_stage1_config(path: str) -> Dict[str, Any]:
@@ -38,6 +69,8 @@ def derive_backbone_config(base_config: Dict[str, Any], backbone: BackboneSpec) 
     config["model_name_or_path"] = backbone.local_model_dir
     config["experiment_id"] = _derive_experiment_id(str(config["experiment_id"]), backbone.slug)
     config["output_dir"] = _derive_output_dir(str(config["output_dir"]), backbone.slug, str(config.get("backend", "")))
+    config.update(backbone.config_overrides)
+    config.update(backbone.backend_overrides.get(str(config.get("backend", "")), {}))
     return config
 
 
