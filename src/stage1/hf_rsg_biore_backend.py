@@ -76,10 +76,7 @@ class HfRsgBioREModel(HfText2TextModel):
             torch.nn.init.zeros_(self.prototype_offsets.weight)
         elif prototype_type != "learnable":
             raise ValueError(f"Unknown prototype_type: {prototype_type}")
-        self.relation_projection.to(self.device)
-        self.instance_projection.to(self.device)
-        self.prototype_offsets.to(self.device)
-        self.prototype_norm.to(self.device)
+        self.sync_rsg_head_modules_to_model_dtype(torch)
 
     def trainable_parameters(self) -> Any:
         for parameter in self.model.parameters():
@@ -88,6 +85,11 @@ class HfRsgBioREModel(HfText2TextModel):
             for parameter in module.parameters():
                 if parameter.requires_grad:
                     yield parameter
+
+    def sync_rsg_head_modules_to_model_dtype(self, torch_module: Any) -> None:
+        model_dtype = next(self.model.parameters()).dtype
+        for module in [self.relation_projection, self.instance_projection, self.prototype_offsets, self.prototype_norm]:
+            module.to(device=self.device, dtype=model_dtype)
 
     def compute_training_loss(self, batch: List[Dict[str, str]]) -> Dict[str, Any]:
         import torch

@@ -1,4 +1,5 @@
 import unittest
+import importlib.util
 
 
 class BackendFactoryTest(unittest.TestCase):
@@ -64,6 +65,27 @@ class BackendFactoryTest(unittest.TestCase):
         label = model.fuse_prediction(None, {"CPR:4": 0.1, "NO_RELATION": 0.3})
 
         self.assertEqual(label, "NO_RELATION")
+
+    @unittest.skipUnless(importlib.util.find_spec("torch"), "torch is not installed")
+    def test_rsg_head_modules_follow_bfloat16_model_dtype(self):
+        import torch
+
+        from src.stage1.hf_rsg_biore_backend import HfRsgBioREModel
+
+        rsg = HfRsgBioREModel.__new__(HfRsgBioREModel)
+        rsg.device = "cpu"
+        rsg.model = torch.nn.Linear(2, 2).to(dtype=torch.bfloat16)
+        rsg.relation_projection = torch.nn.Linear(2, 2)
+        rsg.instance_projection = torch.nn.Linear(2, 2)
+        rsg.prototype_offsets = torch.nn.Embedding(2, 2)
+        rsg.prototype_norm = torch.nn.LayerNorm(2)
+
+        rsg.sync_rsg_head_modules_to_model_dtype(torch)
+
+        self.assertEqual(rsg.relation_projection.weight.dtype, torch.bfloat16)
+        self.assertEqual(rsg.instance_projection.weight.dtype, torch.bfloat16)
+        self.assertEqual(rsg.prototype_offsets.weight.dtype, torch.bfloat16)
+        self.assertEqual(rsg.prototype_norm.weight.dtype, torch.bfloat16)
 
 
 if __name__ == "__main__":
