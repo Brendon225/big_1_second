@@ -25,6 +25,8 @@ class HfText2TextModel:
         device: Optional[str] = None,
         model_dtype: str = "float32",
         decoding_strategy: str = "generate",
+        tokenizer_load_kwargs: Optional[Dict[str, Any]] = None,
+        model_load_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         import torch
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -37,8 +39,10 @@ class HfText2TextModel:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model_dtype = model_dtype
         self.decoding_strategy = self._normalize_decoding_strategy(decoding_strategy)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path)
+        self.tokenizer_load_kwargs = dict(tokenizer_load_kwargs or {})
+        self.model_load_kwargs = dict(model_load_kwargs or {})
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, **self.tokenizer_load_kwargs)
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path, **self.model_load_kwargs)
         self._apply_model_dtype(torch, model_dtype)
         self.model.to(self.device)
 

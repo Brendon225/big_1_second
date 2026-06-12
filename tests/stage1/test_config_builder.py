@@ -99,6 +99,72 @@ class ConfigBuilderTest(unittest.TestCase):
         self.assertEqual(derived["gradient_accumulation_steps"], 8)
         self.assertEqual(derived["learning_rate"], 0.00002)
 
+    def test_clinicalt5_derivation_updates_identity_and_output_dir(self):
+        from src.stage1.config_builder import CLINICALT5_BASE, derive_backbone_config
+
+        base_config = {
+            "experiment_id": "chemprot_hf_biobart_P3_full_seed42",
+            "dataset": "ChemProt",
+            "model": "GanjinZero/biobart-base",
+            "model_name_or_path": "models/stage1/biobart-base",
+            "method": "P3_knowledge_enhanced_description",
+            "backend": "hf",
+            "output_dir": "outputs/stage1/chemprot/biobart_text2text/P3_knowledge_enhanced_description_seed42_full",
+        }
+
+        derived = derive_backbone_config(base_config, CLINICALT5_BASE)
+
+        self.assertEqual(derived["experiment_id"], "chemprot_hf_clinicalt5_base_P3_full_seed42")
+        self.assertEqual(derived["model"], "luqh/ClinicalT5-base")
+        self.assertEqual(derived["model_name_or_path"], "models/stage1/clinicalt5-base")
+        self.assertNotIn("model_load_kwargs", derived)
+        self.assertEqual(
+            derived["output_dir"],
+            "outputs/stage1/chemprot/clinicalt5_base_text2text/P3_knowledge_enhanced_description_seed42_full",
+        )
+
+    def test_biobart_v2_large_derivation_uses_large_profile(self):
+        from src.stage1.config_builder import BIOBART_V2_LARGE, derive_backbone_config
+
+        base_config = {
+            "experiment_id": "chemprot_hf_rsg_R2_1_full_seed42",
+            "dataset": "ChemProt",
+            "model": "GanjinZero/biobart-base",
+            "model_name_or_path": "models/stage1/biobart-base",
+            "method": "R2_1_marker_pooling_fusion",
+            "backend": "hf_rsg",
+            "batch_size": 4,
+            "gradient_accumulation_steps": 2,
+            "learning_rate": 0.00003,
+            "model_dtype": "float32",
+            "output_dir": "outputs/stage1/chemprot/rsg_biore/R2_1_marker_pooling_fusion_seed42_full",
+        }
+
+        derived = derive_backbone_config(base_config, BIOBART_V2_LARGE)
+
+        self.assertEqual(derived["experiment_id"], "chemprot_hf_rsg_biobart_v2_large_R2_1_full_seed42")
+        self.assertEqual(derived["model"], "GanjinZero/biobart-v2-large")
+        self.assertEqual(derived["model_name_or_path"], "models/stage1/biobart-v2-large")
+        self.assertEqual(derived["model_dtype"], "bfloat16")
+        self.assertEqual(derived["batch_size"], 1)
+        self.assertEqual(derived["gradient_accumulation_steps"], 8)
+
+    def test_custom_backbone_spec_can_reuse_large_profile(self):
+        from src.stage1.config_builder import make_custom_backbone_spec
+
+        spec = make_custom_backbone_spec(
+            slug="my_t5_large",
+            model_name="org/model-large",
+            local_model_dir="models/stage1/my-t5-large",
+            size_profile="large",
+        )
+
+        self.assertEqual(spec.slug, "my_t5_large")
+        self.assertEqual(spec.model_name, "org/model-large")
+        self.assertEqual(spec.local_model_dir, "models/stage1/my-t5-large")
+        self.assertEqual(spec.config_overrides["model_dtype"], "bfloat16")
+        self.assertEqual(spec.backend_overrides["hf_rsg"]["batch_size"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

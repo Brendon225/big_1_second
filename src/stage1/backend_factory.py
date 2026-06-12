@@ -30,6 +30,8 @@ def build_stage1_model(
             "device": kwargs.get("device"),
             "model_dtype": kwargs.get("model_dtype", "float32"),
             "decoding_strategy": kwargs.get("decoding_strategy", "generate"),
+            "tokenizer_load_kwargs": kwargs.get("tokenizer_load_kwargs"),
+            "model_load_kwargs": kwargs.get("model_load_kwargs"),
         }
         if backend == "hf_rsg":
             init_kwargs.update(

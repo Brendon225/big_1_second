@@ -82,6 +82,36 @@ class BackendFactoryTest(unittest.TestCase):
 
         self.assertEqual(captured_kwargs["decoding_strategy"], "label_scoring")
 
+    def test_backend_factory_passes_hf_load_kwargs(self):
+        import src.stage1.backend_factory as backend_factory
+        from src.stage1.schema import load_relation_schema
+
+        captured_kwargs = {}
+
+        class FakeHfBackend:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+
+        original_require = backend_factory.require_modules
+        original_resolve = backend_factory.resolve_hf_backend_class
+        backend_factory.require_modules = lambda *_args, **_kwargs: None
+        backend_factory.resolve_hf_backend_class = lambda _backend: FakeHfBackend
+        try:
+            backend_factory.build_stage1_model(
+                method="P3_knowledge_enhanced_description",
+                schema=load_relation_schema("data/stage1/tiny/relation_schema.yaml"),
+                semantic_field="knowledge_enhanced_description",
+                backend="hf",
+                tokenizer_load_kwargs={"use_fast": False},
+                model_load_kwargs={"from_flax": True},
+            )
+        finally:
+            backend_factory.require_modules = original_require
+            backend_factory.resolve_hf_backend_class = original_resolve
+
+        self.assertEqual(captured_kwargs["tokenizer_load_kwargs"], {"use_fast": False})
+        self.assertEqual(captured_kwargs["model_load_kwargs"], {"from_flax": True})
+
     def test_rsg_fusion_falls_back_to_prototype_for_invalid_generation(self):
         from src.stage1.hf_rsg_biore_backend import HfRsgBioREModel
 

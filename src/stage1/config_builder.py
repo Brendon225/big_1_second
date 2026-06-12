@@ -14,6 +14,26 @@ class BackboneSpec:
     backend_overrides: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
 
+LARGE_BACKBONE_CONFIG_OVERRIDES = {
+    "model_dtype": "bfloat16",
+    "learning_rate": 0.00002,
+}
+
+
+LARGE_BACKBONE_BACKEND_OVERRIDES = {
+    "hf": {
+        "batch_size": 2,
+        "eval_batch_size": 1,
+        "gradient_accumulation_steps": 4,
+    },
+    "hf_rsg": {
+        "batch_size": 1,
+        "eval_batch_size": 1,
+        "gradient_accumulation_steps": 8,
+    },
+}
+
+
 SCIFIVE_BASE_PUBMED_PMC = BackboneSpec(
     slug="scifive",
     model_name="razent/SciFive-base-Pubmed_PMC",
@@ -25,29 +45,61 @@ SCIFIVE_LARGE_PUBMED_PMC = BackboneSpec(
     slug="scifive_large",
     model_name="razent/SciFive-large-Pubmed_PMC",
     local_model_dir="models/stage1/scifive-large-pubmed-pmc",
-    config_overrides={
-        "model_dtype": "bfloat16",
-        "learning_rate": 0.00002,
-    },
-    backend_overrides={
-        "hf": {
-            "batch_size": 2,
-            "eval_batch_size": 1,
-            "gradient_accumulation_steps": 4,
-        },
-        "hf_rsg": {
-            "batch_size": 1,
-            "eval_batch_size": 1,
-            "gradient_accumulation_steps": 8,
-        },
-    },
+    config_overrides=LARGE_BACKBONE_CONFIG_OVERRIDES,
+    backend_overrides=LARGE_BACKBONE_BACKEND_OVERRIDES,
+)
+
+
+BIOBART_V2_BASE = BackboneSpec(
+    slug="biobart_v2_base",
+    model_name="GanjinZero/biobart-v2-base",
+    local_model_dir="models/stage1/biobart-v2-base",
+)
+
+
+BIOBART_V2_LARGE = BackboneSpec(
+    slug="biobart_v2_large",
+    model_name="GanjinZero/biobart-v2-large",
+    local_model_dir="models/stage1/biobart-v2-large",
+    config_overrides=LARGE_BACKBONE_CONFIG_OVERRIDES,
+    backend_overrides=LARGE_BACKBONE_BACKEND_OVERRIDES,
+)
+
+
+CLINICALT5_BASE = BackboneSpec(
+    slug="clinicalt5_base",
+    model_name="luqh/ClinicalT5-base",
+    local_model_dir="models/stage1/clinicalt5-base",
 )
 
 
 BACKBONES = {
+    "biobart-v2-base": BIOBART_V2_BASE,
+    "biobart-v2-large": BIOBART_V2_LARGE,
+    "clinicalt5-base": CLINICALT5_BASE,
     "scifive-base": SCIFIVE_BASE_PUBMED_PMC,
     "scifive-large": SCIFIVE_LARGE_PUBMED_PMC,
 }
+
+
+def make_custom_backbone_spec(
+    slug: str,
+    model_name: str,
+    local_model_dir: str,
+    size_profile: str = "base",
+) -> BackboneSpec:
+    normalized_profile = str(size_profile).lower()
+    if normalized_profile == "base":
+        return BackboneSpec(slug=slug, model_name=model_name, local_model_dir=local_model_dir)
+    if normalized_profile == "large":
+        return BackboneSpec(
+            slug=slug,
+            model_name=model_name,
+            local_model_dir=local_model_dir,
+            config_overrides=LARGE_BACKBONE_CONFIG_OVERRIDES,
+            backend_overrides=LARGE_BACKBONE_BACKEND_OVERRIDES,
+        )
+    raise ValueError(f"Unknown size_profile: {size_profile}")
 
 
 def read_stage1_config(path: str) -> Dict[str, Any]:

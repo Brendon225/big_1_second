@@ -22,6 +22,8 @@ class HfRsgBioREModel(HfText2TextModel):
         device: Optional[str] = None,
         model_dtype: str = "float32",
         decoding_strategy: str = "generate",
+        tokenizer_load_kwargs: Optional[Dict[str, Any]] = None,
+        model_load_kwargs: Optional[Dict[str, Any]] = None,
         alignment_lambda: float = 0.1,
         temperature_tau: float = 0.1,
         prototype_type: str = "learnable",
@@ -42,6 +44,8 @@ class HfRsgBioREModel(HfText2TextModel):
             device=device,
             model_dtype=model_dtype,
             decoding_strategy=decoding_strategy,
+            tokenizer_load_kwargs=tokenizer_load_kwargs,
+            model_load_kwargs=model_load_kwargs,
         )
         if temperature_tau <= 0:
             raise ValueError("temperature_tau must be positive")

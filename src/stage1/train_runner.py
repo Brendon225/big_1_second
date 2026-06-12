@@ -36,6 +36,8 @@ def run_training(config_path: str) -> Dict[str, Any]:
         device=config.get("device"),
         model_dtype=config.get("model_dtype", "float32"),
         decoding_strategy=config.get("decoding_strategy", "generate"),
+        tokenizer_load_kwargs=config.get("tokenizer_load_kwargs"),
+        model_load_kwargs=config.get("model_load_kwargs"),
     )
 
     train_log = [
