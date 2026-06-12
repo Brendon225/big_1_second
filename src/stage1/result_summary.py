@@ -14,6 +14,7 @@ SUMMARY_FIELDS = [
     "model",
     "method",
     "backend",
+    "decoding_strategy",
     "train_samples",
     "dev_samples",
     "test_samples",
@@ -26,6 +27,10 @@ SUMMARY_FIELDS = [
     "no_relation_f1",
     "valid_output_rate",
     "relation_validity_rate",
+    "generation_valid_output_rate",
+    "generation_relation_validity_rate",
+    "prototype_fusion_applied_rate",
+    "prototype_fusion_fallback_rate",
     "prototype_top1_accuracy",
     "prototype_top3_accuracy",
     "generation_vs_prototype_agreement",
@@ -40,6 +45,7 @@ def summarize_metrics(root_dir: str) -> List[Dict[str, Any]]:
     root = Path(root_dir)
     for metrics_path in sorted(root.rglob("metrics.json")):
         payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+        backfill_config_diagnostics(payload, metrics_path.parent)
         backfill_missing_diagnostics(payload, metrics_path.parent)
         row = {field: payload.get(field, "") for field in SUMMARY_FIELDS}
         row["metrics_path"] = str(metrics_path)
@@ -47,10 +53,32 @@ def summarize_metrics(root_dir: str) -> List[Dict[str, Any]]:
     return sorted(rows, key=lambda item: str(item.get("experiment_id", "")))
 
 
+def backfill_config_diagnostics(payload: Dict[str, Any], run_dir: Path) -> None:
+    if "decoding_strategy" in payload:
+        return
+    config_path = run_dir / "run_config.yaml"
+    if not config_path.exists():
+        return
+    try:
+        config = read_json_config(str(config_path))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return
+    payload["decoding_strategy"] = config.get("decoding_strategy", "generate")
+
+
 def backfill_missing_diagnostics(payload: Dict[str, Any], run_dir: Path) -> None:
     missing_fields = [
         field
-        for field in ["overall_accuracy", "no_relation_precision", "no_relation_recall", "no_relation_f1"]
+        for field in [
+            "overall_accuracy",
+            "no_relation_precision",
+            "no_relation_recall",
+            "no_relation_f1",
+            "generation_valid_output_rate",
+            "generation_relation_validity_rate",
+            "prototype_fusion_applied_rate",
+            "prototype_fusion_fallback_rate",
+        ]
         if field not in payload
     ]
     if not missing_fields:

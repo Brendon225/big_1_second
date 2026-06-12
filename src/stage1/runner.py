@@ -69,6 +69,14 @@ def run_experiment(config_path: str) -> Dict[str, Any]:
 
 def write_error_cases(path: str, config: Dict[str, Any], predictions: List[Dict[str, Any]]) -> None:
     errors = [item for item in predictions if item.get("gold_label") != item.get("pred_label")]
+    invalid_generation = sum(1 for item in predictions if not item.get("valid_output"))
+    has_raw_generation = any("generation_valid_output" in item for item in predictions)
+    invalid_raw_generation = sum(1 for item in predictions if item.get("generation_valid_output") is False)
+    prototype_fusion_fallback = sum(
+        1
+        for item in predictions
+        if item.get("prototype_fusion_applied") and item.get("generation_relation_valid") is False
+    )
     lines = [
         "# Error Cases",
         "",
@@ -84,11 +92,16 @@ def write_error_cases(path: str, config: Dict[str, Any], predictions: List[Dict[
         "| Error Type | Count | Description |",
         "|---|---:|---|",
         f"| label_confusion | {len(errors)} | Predicted label differs from gold label |",
-        "| invalid_generation | 0 | Output could not be parsed or mapped to schema |",
-        "",
-        "## Representative Cases",
-        "",
+        f"| invalid_generation | {invalid_generation} | Final output could not be parsed or mapped to schema |",
     ]
+    if has_raw_generation:
+        lines.extend(
+            [
+                f"| invalid_raw_generation | {invalid_raw_generation} | Raw decoder output before prototype fusion was invalid |",
+                f"| prototype_fusion_fallback | {prototype_fusion_fallback} | Prototype fusion replaced an invalid raw decoder label |",
+            ]
+        )
+    lines.extend(["", "## Representative Cases", ""])
     for index, item in enumerate(errors[:5], start=1):
         lines.extend(
             [

@@ -35,6 +35,7 @@ def run_training(config_path: str) -> Dict[str, Any]:
         max_output_length=config.get("max_output_length", 32),
         device=config.get("device"),
         model_dtype=config.get("model_dtype", "float32"),
+        decoding_strategy=config.get("decoding_strategy", "generate"),
     )
 
     train_log = [
@@ -80,6 +81,7 @@ def run_training(config_path: str) -> Dict[str, Any]:
         "model": config["model"],
         "method": config["method"],
         "backend": config.get("backend", "mock"),
+        "decoding_strategy": config.get("decoding_strategy", "generate"),
         "train_samples": len(train_samples),
         "dev_samples": len(dev_samples),
         "test_samples": len(test_samples),

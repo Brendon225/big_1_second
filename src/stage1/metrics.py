@@ -67,6 +67,18 @@ def evaluate_predictions(
     overall_correct = sum(1 for item in records if item.get("gold_label") == item.get("pred_label"))
     no_relation_stats = aggregate_label_group(records, no_relation_labels)
 
+    generation_items = [item for item in records if "generation_valid_output" in item]
+    if generation_items:
+        generation_valid_count = sum(1 for item in generation_items if item.get("generation_valid_output"))
+        generation_relation_valid_count = sum(1 for item in generation_items if item.get("generation_relation_valid"))
+        generation_denominator = len(generation_items)
+    else:
+        generation_valid_count = valid_count
+        generation_relation_valid_count = relation_valid_count
+        generation_denominator = len(records)
+    fusion_items = [item for item in records if item.get("prototype_fusion_applied")]
+    fusion_fallback_count = sum(1 for item in fusion_items if item.get("generation_relation_valid") is False)
+
     prototype_available = [item for item in records if item.get("prototype_topk")]
     prototype_top1 = sum(1 for item in prototype_available if item.get("prototype_top1") == item.get("gold_label"))
     prototype_top3 = sum(
@@ -89,6 +101,10 @@ def evaluate_predictions(
         "no_relation_precision": no_relation_stats["precision"],
         "no_relation_recall": no_relation_stats["recall"],
         "no_relation_f1": no_relation_stats["f1"],
+        "generation_valid_output_rate": generation_valid_count / max(generation_denominator, 1),
+        "generation_relation_validity_rate": generation_relation_valid_count / max(generation_denominator, 1),
+        "prototype_fusion_applied_rate": len(fusion_items) / max(len(records), 1),
+        "prototype_fusion_fallback_rate": fusion_fallback_count / max(len(fusion_items), 1),
         "prototype_top1_accuracy": prototype_top1 / max(len(prototype_available), 1),
         "prototype_top3_accuracy": prototype_top3 / max(len(prototype_available), 1),
         "generation_vs_prototype_agreement": agreement_count / max(len(agreement_items), 1),

@@ -21,6 +21,7 @@ class HfRsgBioREModel(HfText2TextModel):
         max_output_length: int = 32,
         device: Optional[str] = None,
         model_dtype: str = "float32",
+        decoding_strategy: str = "generate",
         alignment_lambda: float = 0.1,
         temperature_tau: float = 0.1,
         prototype_type: str = "learnable",
@@ -40,6 +41,7 @@ class HfRsgBioREModel(HfText2TextModel):
             max_output_length=max_output_length,
             device=device,
             model_dtype=model_dtype,
+            decoding_strategy=decoding_strategy,
         )
         if temperature_tau <= 0:
             raise ValueError("temperature_tau must be positive")
@@ -117,12 +119,7 @@ class HfRsgBioREModel(HfText2TextModel):
         with torch.no_grad():
             generation_output = self.model(**inputs, labels=labels)
             alignment_loss, _logits, scores = self.compute_alignment_loss(examples, inputs)
-            generated = self.model.generate(
-                **inputs,
-                max_length=self.max_output_length,
-                num_beams=1,
-            )
-        raw_outputs = self.tokenizer.batch_decode(generated, skip_special_tokens=True)
+            raw_outputs = self.decode_raw_outputs(inputs)
 
         predictions = []
         prototype_rows = []

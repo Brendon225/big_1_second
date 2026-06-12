@@ -24,6 +24,7 @@ class HfText2TextModel:
         max_output_length: int = 32,
         device: Optional[str] = None,
         model_dtype: str = "float32",
+        decoding_strategy: str = "generate",
     ) -> None:
         import torch
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -35,6 +36,7 @@ class HfText2TextModel:
         self.max_output_length = max_output_length
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model_dtype = model_dtype
+        self.decoding_strategy = self._normalize_decoding_strategy(decoding_strategy)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path)
         self._apply_model_dtype(torch, model_dtype)
@@ -76,12 +78,7 @@ class HfText2TextModel:
 
         with torch.no_grad():
             loss_output = self.model(**inputs, labels=labels)
-            generated = self.model.generate(
-                **inputs,
-                max_length=self.max_output_length,
-                num_beams=1,
-            )
-        raw_outputs = self.tokenizer.batch_decode(generated, skip_special_tokens=True)
+            raw_outputs = self.decode_raw_outputs(inputs)
 
         predictions = []
         mismatches = 0
@@ -143,6 +140,85 @@ class HfText2TextModel:
             predictions=predictions,
             prototype_scores=prototype_scores,
         )
+
+    def decode_raw_outputs(self, inputs: Dict[str, Any]) -> List[str]:
+        if self.decoding_strategy == "generate":
+            return self.generate_raw_outputs(inputs)
+        if self.decoding_strategy == "label_scoring":
+            return self.format_label_scoring_outputs(self.score_label_candidates(inputs))
+        raise ValueError(f"Unknown decoding_strategy: {self.decoding_strategy}")
+
+    def generate_raw_outputs(self, inputs: Dict[str, Any]) -> List[str]:
+        generated = self.model.generate(
+            **inputs,
+            max_length=self.max_output_length,
+            num_beams=1,
+        )
+        return self.tokenizer.batch_decode(generated, skip_special_tokens=True)
+
+    def score_label_candidates(self, inputs: Dict[str, Any]) -> List[Dict[str, float]]:
+        import torch
+
+        labels = list(self.schema.labels)
+        candidate_texts = [f"relation: {label}" for label in labels]
+        candidate_label_ids = self.tokenizer(
+            candidate_texts,
+            padding=True,
+            truncation=True,
+            max_length=self.max_output_length,
+            return_tensors="pt",
+        )["input_ids"].to(self.device)
+        pad_token_id = self.tokenizer.pad_token_id
+        if pad_token_id is None:
+            pad_token_id = self.tokenizer.eos_token_id
+        masked_labels = candidate_label_ids.clone()
+        if pad_token_id is not None:
+            masked_labels[masked_labels == pad_token_id] = -100
+
+        first_tensor = next(iter(inputs.values()))
+        batch_size = int(first_tensor.shape[0])
+        score_rows: List[Dict[str, float]] = []
+        for row_index in range(batch_size):
+            repeated_inputs = {}
+            for key, value in inputs.items():
+                repeat_shape = (len(labels),) + tuple(1 for _ in range(value.dim() - 1))
+                repeated_inputs[key] = value[row_index : row_index + 1].repeat(*repeat_shape)
+            output = self.model(**repeated_inputs, labels=masked_labels)
+            logits = output.logits.float()
+            token_losses = torch.nn.functional.cross_entropy(
+                logits.reshape(-1, logits.shape[-1]),
+                masked_labels.reshape(-1),
+                ignore_index=-100,
+                reduction="none",
+            ).view(len(labels), -1)
+            token_mask = masked_labels.ne(-100)
+            sequence_losses = token_losses.sum(dim=1) / token_mask.sum(dim=1).clamp(min=1)
+            score_rows.append(
+                {label: float(sequence_losses[index].detach().cpu().item()) for index, label in enumerate(labels)}
+            )
+        return score_rows
+
+    def format_label_scoring_outputs(self, score_rows: List[Dict[str, float]]) -> List[str]:
+        raw_outputs = []
+        for score_map in score_rows:
+            best_label = min(score_map.items(), key=lambda item: item[1])[0]
+            raw_outputs.append(f"relation: {best_label}")
+        return raw_outputs
+
+    def _normalize_decoding_strategy(self, decoding_strategy: str) -> str:
+        normalized = str(decoding_strategy or "generate").lower()
+        aliases = {
+            "free": "generate",
+            "free_generate": "generate",
+            "generation": "generate",
+            "constrained": "label_scoring",
+            "constrained_label_scoring": "label_scoring",
+            "label_score": "label_scoring",
+        }
+        normalized = aliases.get(normalized, normalized)
+        if normalized not in {"generate", "label_scoring"}:
+            raise ValueError(f"Unknown decoding_strategy: {decoding_strategy}")
+        return normalized
 
     def train_model(
         self,

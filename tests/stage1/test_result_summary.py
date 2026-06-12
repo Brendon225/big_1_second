@@ -67,6 +67,61 @@ class ResultSummaryTest(unittest.TestCase):
         self.assertEqual(rows[0]["overall_accuracy"], 1.0)
         self.assertEqual(rows[0]["no_relation_f1"], 1.0)
 
+    def test_summarize_results_backfills_generation_and_fusion_diagnostics(self):
+        from src.stage1.data_io import write_jsonl
+        from src.stage1.result_summary import summarize_metrics
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "outputs" / "run"
+            run_dir.mkdir(parents=True)
+            (run_dir / "metrics.json").write_text(
+                json.dumps({"experiment_id": "run", "micro_f1": 0.4}),
+                encoding="utf-8",
+            )
+            (run_dir / "run_config.yaml").write_text(
+                json.dumps(
+                    {
+                        "schema_file": "data/stage1/tiny/relation_schema.yaml",
+                        "decoding_strategy": "label_scoring",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            write_jsonl(
+                str(run_dir / "predictions.jsonl"),
+                [
+                    {
+                        "gold_label": "CPR:4",
+                        "pred_label": "CPR:4",
+                        "valid_output": True,
+                        "relation_valid": True,
+                        "generation_valid_output": False,
+                        "generation_relation_valid": False,
+                        "prototype_fusion_applied": True,
+                        "prototype_top1": "CPR:4",
+                        "prototype_topk": ["CPR:4", "NO_RELATION"],
+                    },
+                    {
+                        "gold_label": "NO_RELATION",
+                        "pred_label": "NO_RELATION",
+                        "valid_output": True,
+                        "relation_valid": True,
+                        "generation_valid_output": True,
+                        "generation_relation_valid": True,
+                        "prototype_fusion_applied": True,
+                        "prototype_top1": "NO_RELATION",
+                        "prototype_topk": ["NO_RELATION", "CPR:4"],
+                    },
+                ],
+            )
+
+            rows = summarize_metrics(str(Path(tmp) / "outputs"))
+
+        self.assertEqual(rows[0]["decoding_strategy"], "label_scoring")
+        self.assertEqual(rows[0]["generation_valid_output_rate"], 0.5)
+        self.assertEqual(rows[0]["generation_relation_validity_rate"], 0.5)
+        self.assertEqual(rows[0]["prototype_fusion_fallback_rate"], 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()
